@@ -1,0 +1,49 @@
+.gauge-container {
+  position: relative;
+}
+
+.gauge-canvas {
+  transition: filter 0.3s ease;
+}
+
+/* Light theme by default */
+.gauge-text-display {
+  color: #111827; /* Light theme text */
+}
+
+.gauge-text-display span {
+  color: rgba(0, 0, 0, 0.6); /* Light theme subtext */
+}
+
+/* Dark theme overrides */
+.dark .gauge-text-display {
+  color: #ffffff !important; /* Force white text in dark theme */
+}
+
+.dark .gauge-text-display span {
+  color: rgba(
+    255,
+    255,
+    255,
+    0.7
+  ) !important; /* Force white subtext in dark theme */
+}
+
+/* Add smooth theme transitions */
+.gauge-container,
+.gauge-canvas,
+.gauge-text-display,
+.gauge-text-display span {
+  transition: all 0.3s ease;
+}
+
+/* Optional: Add media query for system preference */
+@media (prefers-color-scheme: dark) {
+  .gauge-text-display:not(.light-override) {
+    color: #ffffff;
+  }
+
+  .gauge-text-display:not(.light-override) span {
+    color: rgba(255, 255, 255, 0.7);
+  }
+}

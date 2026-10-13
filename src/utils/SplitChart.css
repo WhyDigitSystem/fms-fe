@@ -1,0 +1,19 @@
+#foo {
+  height: 150px;
+  width: 250px;
+}
+.wrap {
+  position: absolute;
+  top: 210px;
+  left: 50px;
+}
+.zero {
+  position: absolute;
+  top: 165px;
+  left: 80px;
+}
+.twohundred {
+  position: absolute;
+  top: 165px;
+  left: 280px;
+}
