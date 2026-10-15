@@ -37,6 +37,7 @@ import FmsDashboard from "./pages/FmsDashboard";
 import Enquiry from "./components/sales/Enquiry/Enquiry";
 import Quotation from "./components/sales/quotation/Quotation";
 import Sales from "./components/sales/Sales";
+import Booking from "./components/sales/booking/Booking";
 
 // Theme initializer component
 const ThemeInitializer = () => {
@@ -144,6 +145,7 @@ const AppContent = () => {
                       <Route path="/sales" element={<Sales/>} />
                       <Route path="/enquiry" element={<Enquiry />} />
                       <Route path="/quotation" element={<Quotation />} />
+                    <Route path="/booking" element={<Booking />} />
                     </Routes>
                   </Layout>
                 </ProtectedRoute>

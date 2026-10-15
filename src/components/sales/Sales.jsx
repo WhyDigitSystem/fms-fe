@@ -1,4 +1,4 @@
-import { FileText, ClipboardList } from "lucide-react";
+import { FileText, ClipboardList, CalendarCheck } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { hasScreenAccess } from "../../utils/accessControl";
 
@@ -20,6 +20,13 @@ const sales = () => {
       path: "/quotation",
       color: "green",
       screenCode: "QUOTATION",
+    },
+    {
+      name: "Booking",
+      icon: CalendarCheck,
+      path: "/booking",
+      color: "purple",
+      screenCode: "BOOKING",
     },
   ];
 
