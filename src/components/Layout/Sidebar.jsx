@@ -1,6 +1,11 @@
 import { clsx } from "clsx";
 import Lottie from "lottie-react";
-import { LayoutDashboard, ShoppingCart, Settings } from "lucide-react";
+import {
+  LayoutDashboard,
+  ShoppingCart,
+  Database,
+  Settings,
+} from "lucide-react";
 import { useSelector } from "react-redux";
 import { NavLink } from "react-router-dom";
 import truckAnimation from "../../assets/lottieflow-ecommerce.json";
@@ -22,7 +27,17 @@ const Sidebar = () => {
       screenCode: "DASHBOARD",
     },
     {
-      name: "Sales ",
+      name: "Master",
+      href: "/master",
+      icon: Database,
+      iconColor: "text-purple-500",
+      textColor: "text-purple-600 dark:text-purple-400",
+      borderColor: "border-purple-300 dark:border-purple-700",
+      bgColor: "bg-purple-50 dark:bg-purple-900/20",
+      screenCode: "MASTER",
+    },
+    {
+      name: "Sales",
       href: "/sales",
       icon: ShoppingCart,
       iconColor: "text-green-500",
