@@ -28,6 +28,8 @@ import {
   KeyRound,
   Network,
   FileCheck,
+  Package,
+  Wrench,
 } from "lucide-react";
 
 import { useNavigate } from "react-router-dom";
@@ -140,6 +142,20 @@ const MASTERS = [
     path: "/roles",
     color: "blue",
     screenCode: "RR",
+  },
+  {
+    name: "Product",
+    icon: Package,
+    path: "/product",
+    color: "blue",
+    screenCode: "PROD",
+  },
+  {
+    name: "Service",
+    icon: Wrench,
+    path: "/service",
+    color: "teal",
+    screenCode: "SERV",
   },
 ];
 

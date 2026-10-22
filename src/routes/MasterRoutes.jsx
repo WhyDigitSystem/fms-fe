@@ -17,6 +17,8 @@ import BranchMaster from "../components/masters/branch/BranchMaster";
 import RolesAndResponsibilitySetup from "../components/masters/rolesResponsibilities/RolesAndResponsibilitySetup";
 import DepartmentMasterPage from "../components/masters/Department/DepartmentMaster";
 import DesignationMasterPage from "../components/masters/Designation/DesignationMaster";
+import ServiceMaster from "../components/masters/service/ServiceMaster";
+import ProductMaster from "../components/masters/product/ProductMaster";
 
 const masterRoutes = [
   {
@@ -82,6 +84,14 @@ const masterRoutes = [
   {
     path: "employee",
     element: <EmployeeMasterPage />,
+  },
+  {
+    path: "service",
+    element: <ServiceMaster />,
+  },
+  {
+    path: "product",
+    element: <ProductMaster />,
   },
 ];
 

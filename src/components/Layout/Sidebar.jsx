@@ -1,152 +1,209 @@
 import { clsx } from "clsx";
-import Lottie from "lottie-react";
 import {
   LayoutDashboard,
   ShoppingCart,
   Database,
   Settings,
+  X,
 } from "lucide-react";
-import { useSelector } from "react-redux";
+import { useDispatch, useSelector } from "react-redux";
 import { NavLink } from "react-router-dom";
-import truckAnimation from "../../assets/lottieflow-ecommerce.json";
 import { hasScreenAccess } from "../../utils/accessControl";
+import { toggleSidebar } from "../../store/slices/uiSlice";
 
 const Sidebar = () => {
+  const dispatch = useDispatch();
   const sidebarOpen = useSelector((state) => state.ui.sidebarOpen);
-  const userType = localStorage.getItem("userType")?.toUpperCase();
+  const user = useSelector((state) => state.auth.user);
+
+  const userType =
+    user?.type?.toUpperCase() ||
+    localStorage.getItem("userType")?.toUpperCase();
+
+  const isSAdmin = userType === "SADMIN";
 
   const navigation = [
     {
       name: "Dashboard",
       href: "/",
       icon: LayoutDashboard,
-      iconColor: "text-blue-500",
-      textColor: "text-blue-600 dark:text-blue-400",
-      borderColor: "border-blue-300 dark:border-blue-700",
-      bgColor: "bg-blue-50 dark:bg-blue-900/20",
+      color: "indigo",
       screenCode: "DASHBOARD",
     },
     {
       name: "Master",
       href: "/master",
       icon: Database,
-      iconColor: "text-purple-500",
-      textColor: "text-purple-600 dark:text-purple-400",
-      borderColor: "border-purple-300 dark:border-purple-700",
-      bgColor: "bg-purple-50 dark:bg-purple-900/20",
+      color: "emerald",
       screenCode: "MASTER",
     },
     {
       name: "Sales",
       href: "/sales",
       icon: ShoppingCart,
-      iconColor: "text-green-500",
-      textColor: "text-green-600 dark:text-green-400",
-      borderColor: "border-green-300 dark:border-green-700",
-      bgColor: "bg-green-50 dark:bg-green-900/20",
+      color: "orange",
       screenCode: "SALES",
     },
     {
       name: "Setup",
       href: "/setup",
       icon: Settings,
-      iconColor: "text-gray-500",
-      textColor: "text-gray-600 dark:text-gray-400",
-      borderColor: "border-gray-300 dark:border-gray-700",
-      bgColor: "bg-gray-50 dark:bg-gray-900/20",
+      color: "slate",
       screenCode: "SETUP",
     },
   ];
 
-  // const filteredNavigation = navigation.filter(item => {
-  //   const hasAccess = hasScreenAccess(item.screenCode);
-  //   return hasAccess;
-  // });
-
   const filteredNavigation = navigation.filter((item) => {
-    if (userType === "SADMIN") {
+    if (isSAdmin) {
       return item.screenCode === "SETUP";
     }
 
     return hasScreenAccess(item.screenCode);
   });
 
+  const iconColors = {
+    indigo: {
+      icon: "text-indigo-600 dark:text-indigo-400",
+      bg: "bg-indigo-100 dark:bg-indigo-900/40",
+      active: "bg-indigo-200 dark:bg-indigo-800",
+    },
+    emerald: {
+      icon: "text-emerald-600 dark:text-emerald-400",
+      bg: "bg-emerald-100 dark:bg-emerald-900/40",
+      active: "bg-emerald-200 dark:bg-emerald-800",
+    },
+    orange: {
+      icon: "text-orange-600 dark:text-orange-400",
+      bg: "bg-orange-100 dark:bg-orange-900/40",
+      active: "bg-orange-200 dark:bg-orange-800",
+    },
+    slate: {
+      icon: "text-slate-600 dark:text-slate-300",
+      bg: "bg-slate-100 dark:bg-slate-800",
+      active: "bg-slate-200 dark:bg-slate-700",
+    },
+  };
+
+  const closeMobileSidebar = () => {
+    if (window.innerWidth < 768 && sidebarOpen) {
+      dispatch(toggleSidebar());
+    }
+  };
+
   if (filteredNavigation.length === 0) {
     return null;
   }
 
   return (
-    <aside
-      aria-label="Sidebar Navigation"
-      className={clsx(
-        "bg-white dark:bg-gray-900 border-r border-gray-100 dark:border-gray-800 transition-all duration-300 h-full",
-        sidebarOpen ? "w-64" : "w-20",
-      )}
-    >
-      <nav className="h-full flex flex-col">
-        {/* Brand */}
-        <div className="flex items-center justify-center gap-3 mb-4 mt-4">
-          <div className="w-12 h-12 bg-gradient-to-r from-blue-600 to-purple-600 rounded-xl shadow-md flex items-center justify-center">
-            <Lottie animationData={truckAnimation} loop autoplay />
-          </div>
+    <>
+      {/* Mobile backdrop */}
+      <button
+        type="button"
+        aria-label="Close sidebar"
+        tabIndex={sidebarOpen ? 0 : -1}
+        onClick={closeMobileSidebar}
+        className={clsx(
+          "fixed inset-x-0 bottom-0 top-14 z-30 bg-black/30",
+          "transition-opacity duration-300 ease-in-out md:hidden",
+          sidebarOpen
+            ? "pointer-events-auto opacity-100"
+            : "pointer-events-none opacity-0",
+        )}
+      />
 
-          {sidebarOpen && (
-            <div>
-              <h1 className="text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-                WMS
-              </h1>
-              <p className="text-xs text-gray-500 dark:text-gray-400">
-                Logistics Management
-              </p>
-            </div>
-          )}
-        </div>
+      {/* Sidebar */}
+      <aside
+        id="sidebar"
+        aria-label="Sidebar Navigation"
+        className={clsx(
+          "fixed bottom-0 left-0 top-14 z-40 flex flex-col",
+          "w-[min(170px,80vw)]",
+          "border-r border-gray-100 bg-white dark:border-gray-800 dark:bg-gray-900",
+          "transform-gpu transition-transform duration-300 ease-in-out",
+          sidebarOpen ? "translate-x-0" : "-translate-x-full",
+          "md:sticky md:top-0 md:bottom-auto md:h-full",
+          "md:translate-x-0 md:transform-none",
+          "md:transition-[width] md:duration-300 md:ease-in-out",
+          sidebarOpen ? "md:w-[170px]" : "md:w-20",
+        )}
+      >
+        {/* Mobile sidebar header */}
 
-        {/* Links */}
-        <div className="flex-1 p-2 space-y-1 overflow-y-auto">
+        {/* Navigation links */}
+        <nav className="mt-1 flex-1 space-y-0.5 overflow-x-hidden overflow-y-auto px-1.5 py-1">
           {filteredNavigation.map((item) => {
             const Icon = item.icon;
+            const colors = iconColors[item.color];
 
             return (
               <NavLink
                 key={item.name}
                 to={item.href}
+                title={!sidebarOpen ? item.name : undefined}
+                onClick={closeMobileSidebar}
                 className={({ isActive }) =>
                   clsx(
-                    "transition-all duration-200 border group hover:shadow-sm",
+                    "group flex min-w-0 rounded-md border",
+                    "transition-colors duration-200",
                     isActive
-                      ? `${item.borderColor} ${item.bgColor} ${item.textColor}`
-                      : "border-transparent hover:border-gray-200 dark:hover:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-400",
+                      ? "border-gray-200 bg-gray-100/80 dark:border-gray-700 dark:bg-gray-800/70"
+                      : "border-transparent hover:border-gray-200 hover:bg-gray-50 dark:hover:border-gray-700 dark:hover:bg-gray-800",
                     sidebarOpen
-                      ? "flex items-center px-3 py-2 rounded-lg"
-                      : "flex flex-col items-center justify-center px-2 py-2 rounded-lg",
+                      ? "items-center gap-2 px-2 py-1.5"
+                      : "flex-col items-center justify-center gap-1 px-1 py-2",
                   )
                 }
               >
-                <Icon className={`h-5 w-5 ${item.iconColor}`} />
+                {({ isActive }) => (
+                  <>
+                    {/* Colored icon */}
+                    <div
+                      className={clsx(
+                        "flex shrink-0 items-center justify-center rounded-md p-1.5",
+                        "transition-transform duration-200 ease-out group-hover:scale-105",
+                        colors.bg,
+                        isActive && colors.active,
+                      )}
+                    >
+                      <Icon
+                        className={clsx("h-4 w-4", colors.icon)}
+                        strokeWidth={1.8}
+                      />
+                    </div>
 
-                {sidebarOpen ? (
-                  <span className="ml-3">{item.name}</span>
-                ) : (
-                  <span className="mt-1 text-[12px] text-center leading-tight break-words">
-                    {item.name}
-                  </span>
+                    {/* Label */}
+                    <span
+                      className={clsx(
+                        "font-medium text-gray-600 dark:text-gray-300",
+                        "transition-colors duration-200",
+                        sidebarOpen
+                          ? "min-w-0 flex-1 truncate text-xs"
+                          : "w-full text-center text-[10px] leading-tight",
+                      )}
+                    >
+                      {item.name}
+                    </span>
+                  </>
                 )}
               </NavLink>
             );
           })}
-        </div>
+        </nav>
 
-        {/* Version */}
-        {sidebarOpen && (
-          <div className="p-4 border-t border-gray-100 dark:border-gray-800">
-            <p className="text-xs text-gray-500 dark:text-gray-400 text-center">
-              v1.0.0
-            </p>
-          </div>
-        )}
-      </nav>
-    </aside>
+        {/* Footer */}
+        <div
+          className={clsx(
+            "shrink-0 overflow-hidden border-t border-gray-100 dark:border-gray-800",
+            "transition-opacity duration-200",
+            sidebarOpen ? "opacity-100" : "opacity-0 md:hidden",
+          )}
+        >
+          <p className="whitespace-nowrap px-2 py-2 text-center text-[10px] text-gray-500 dark:text-gray-400">
+            Version 1.0
+          </p>
+        </div>
+      </aside>
+    </>
   );
 };
 
