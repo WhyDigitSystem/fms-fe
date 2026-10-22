@@ -197,15 +197,6 @@ const Header = () => {
         <div className="flex items-center justify-between gap-2 h-14">
           {/* Left section */}
           <div className="flex items-center gap-2 min-w-0">
-            <button
-              ref={sidebarBtnRef}
-              onClick={() => dispatch(toggleSidebar())}
-              className="shrink-0 p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-              aria-label="Toggle sidebar"
-            >
-              <Menu className="h-5 w-5 text-gray-600 dark:text-gray-400" />
-            </button>
-
             {/* Application title */}
             <div className="flex items-center gap-2 min-w-0">
               <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-blue-600 to-indigo-600">
@@ -222,6 +213,14 @@ const Header = () => {
                 </h1>
               </div>
             </div>
+            <button
+              ref={sidebarBtnRef}
+              onClick={() => dispatch(toggleSidebar())}
+              className="shrink-0 p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+              aria-label="Toggle sidebar"
+            >
+              <Menu className="h-5 w-5 text-gray-600 dark:text-gray-400" />
+            </button>
           </div>
 
           {/* Right section */}
