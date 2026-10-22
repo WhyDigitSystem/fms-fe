@@ -1,7 +1,6 @@
-import { Check, ChevronDown, Globe, X } from 'lucide-react';
-import { useEffect, useState } from 'react';
-import { GlobalParameterAPI } from '../../api/globalParameter';
-
+import { Check, Globe, X } from "lucide-react";
+import { useEffect, useState } from "react";
+import { GlobalParameterAPI } from "../../api/globalParameter";
 
 const GlobalSelectionDropdown = () => {
   const [financialYears, setFinancialYears] = useState([]);
@@ -10,6 +9,7 @@ const GlobalSelectionDropdown = () => {
   const [clients, setClients] = useState([]);
   const [warehouses, setWarehouses] = useState([]);
   const [currentGlobalParams, setCurrentGlobalParams] = useState(null);
+
   const [loading, setLoading] = useState({
     globalParams: false,
     financialYears: false,
@@ -17,8 +17,9 @@ const GlobalSelectionDropdown = () => {
     branches: false,
     clients: false,
     warehouses: false,
-    saving: false
+    saving: false,
   });
+
   const [error, setError] = useState({
     globalParams: null,
     financialYears: null,
@@ -26,235 +27,267 @@ const GlobalSelectionDropdown = () => {
     branches: null,
     clients: null,
     warehouses: null,
-    saving: null
+    saving: null,
   });
+
   const [success, setSuccess] = useState(false);
+
   const [selections, setSelections] = useState({
-    financialYear: '',
-    branch: '',
-    customer: '',
-    client: '',
-    warehouse: ''
+    financialYear: "",
+    branch: "",
+    customer: "",
+    client: "",
+    warehouse: "",
   });
 
   const user = JSON.parse(localStorage.getItem("user"));
 
+  // ---------------------------------------------------------------
   // Fetch current global parameters
+  // ---------------------------------------------------------------
   const fetchCurrentGlobalParameters = async () => {
-    setLoading(prev => ({ ...prev, globalParams: true }));
-    setError(prev => ({ ...prev, globalParams: null }));
+    setLoading((prev) => ({ ...prev, globalParams: true }));
+    setError((prev) => ({ ...prev, globalParams: null }));
     try {
-      const globalParams = await GlobalParameterAPI.getCurrentGlobalParameters(user.userData.orgId, user.userData.usersId);
+      const globalParams = await GlobalParameterAPI.getCurrentGlobalParameters(
+        user.userData.orgId,
+        user.userData.usersId
+      );
       setCurrentGlobalParams(globalParams);
 
       if (globalParams) {
-        // Set the current selections from global parameters
+        // Backend may return ids (new) or codes/strings (legacy). Support both.
+        const fyId = globalParams.financialYear ?? globalParams.finYearId;
+        const branchId = globalParams.branch ?? globalParams.branchId;
+
+        const fy = financialYears.find(
+          (y) => String(y.id) === String(fyId) || String(y.finYear) === String(fyId)
+        );
+        const br = branches.find(
+          (b) =>
+            String(b.branchId) === String(branchId) ||
+            String(b.branchCode) === String(branchId)
+        );
+
         setSelections({
-          financialYear: globalParams.finYear || '',
-          branch: globalParams.branchcode || '',
-          customer: globalParams.customer || '',
-          client: globalParams.client || '',
-          warehouse: globalParams.warehouse || ''
+          financialYear: fy ? String(fy.finYear) : globalParams.finYear || "",
+          branch: br ? br.branchCode : globalParams.branchcode || "",
+          customer: globalParams.customer || "",
+          client: globalParams.client || "",
+          warehouse: globalParams.warehouse || "",
         });
-        // localStorage.setItem("globalParams",globalParams);
+
         localStorage.setItem("globalParams", JSON.stringify(globalParams));
-
-        console.log('Current global parameters loaded:', globalParams);
+        console.log("Current global parameters loaded:", globalParams);
       }
     } catch (err) {
-      setError(prev => ({ ...prev, globalParams: err.message }));
-      console.error('Error fetching current global parameters:', err);
+      setError((prev) => ({ ...prev, globalParams: err.message }));
+      console.error("Error fetching current global parameters:", err);
     } finally {
-      setLoading(prev => ({ ...prev, globalParams: false }));
+      setLoading((prev) => ({ ...prev, globalParams: false }));
     }
   };
 
+  // ---------------------------------------------------------------
   // Fetch financial years
+  // ---------------------------------------------------------------
   const fetchFinancialYears = async () => {
-    setLoading(prev => ({ ...prev, financialYears: true }));
-    setError(prev => ({ ...prev, financialYears: null }));
+    setLoading((prev) => ({ ...prev, financialYears: true }));
+    setError((prev) => ({ ...prev, financialYears: null }));
     try {
-      const financialYearData = await GlobalParameterAPI.getFinancialYears(user.userData.orgId);
-      setFinancialYears(financialYearData);
+      const raw = await GlobalParameterAPI.getFinancialYears(user.userData.orgId);
 
-      // Only set default if we don't have current global params
-      if (!currentGlobalParams) {
-        const currentFinYear = financialYearData.find(year => year.currentFinYear);
-        if (currentFinYear) {
-          setSelections(prev => ({
-            ...prev,
-            financialYear: currentFinYear.finYear.toString()
-          }));
-        } else if (financialYearData.length > 0) {
-          setSelections(prev => ({
-            ...prev,
-            financialYear: financialYearData[0].finYear.toString()
-          }));
-        }
-      }
-    } catch (err) {
-      setError(prev => ({ ...prev, financialYears: err.message }));
-      console.error('Error fetching financial years:', err);
-    } finally {
-      setLoading(prev => ({ ...prev, financialYears: false }));
-    }
-  };
+      // Support {paramObjectsMap:{financialYearVO:[...]}} | data.… | flat array
+      const list =
+        raw?.paramObjectsMap?.financialYearVO ||
+        raw?.paramObjectsMap?.financialYearsVO ||
+        raw?.data?.paramObjectsMap?.financialYearVO ||
+        (Array.isArray(raw) ? raw : []);
 
-  // Fetch branches
-  const fetchBranches = async () => {
-    setLoading(prev => ({ ...prev, branches: true }));
-    setError(prev => ({ ...prev, branches: null }));
-    try {
-      const branchData = await GlobalParameterAPI.getBranches(user.userData.orgId, user.userData.userName);
-      setBranches(branchData);
+      setFinancialYears(list);
 
-      // Only set default if we don't have current global params
-      if (!currentGlobalParams && branchData.length > 0) {
-        setSelections(prev => ({
+      if (!currentGlobalParams && list.length > 0) {
+        const current = list.find((y) => y.currentFinYear) || list[0];
+        setSelections((prev) => ({
           ...prev,
-          branch: branchData[0].branchcode || ''
+          financialYear: String(current.finYear),
         }));
       }
     } catch (err) {
-      setError(prev => ({ ...prev, branches: err.message }));
-      console.error('Error fetching branches:', err);
+      setError((prev) => ({ ...prev, financialYears: err.message }));
+      console.error("Error fetching financial years:", err);
     } finally {
-      setLoading(prev => ({ ...prev, branches: false }));
+      setLoading((prev) => ({ ...prev, financialYears: false }));
     }
   };
 
-  // Fetch customers based on selected branch
+  // ---------------------------------------------------------------
+  // Fetch branches (normalize to { branchId, branchCode, branch })
+  // ---------------------------------------------------------------
+  const fetchBranches = async () => {
+    setLoading((prev) => ({ ...prev, branches: true }));
+    setError((prev) => ({ ...prev, branches: null }));
+    try {
+      const raw = await GlobalParameterAPI.getBranches(
+        user.userData.orgId,
+        user.userData.userName
+      );
+
+      // Support the new "GlopalParameters" key (backend typo) + legacy shapes
+      const list =
+        raw?.paramObjectsMap?.GlopalParameters ||
+        raw?.paramObjectsMap?.globalParameters ||
+        raw?.paramObjectsMap?.branchVO ||
+        raw?.data?.paramObjectsMap?.GlopalParameters ||
+        raw?.data?.paramObjectsMap?.branchVO ||
+        (Array.isArray(raw) ? raw : []);
+
+      // Normalize EVERY row to the same shape
+      const normalized = list.map((b) => ({
+        branchId: b.branchId ?? b.id ?? null,
+        branchCode: b.branchCode ?? b.branchcode ?? "",
+        branch: b.branch ?? b.branchName ?? "",
+      }));
+
+      setBranches(normalized);
+
+      if (!currentGlobalParams && normalized.length > 0) {
+        setSelections((prev) => ({
+          ...prev,
+          branch: normalized[0].branchCode,
+        }));
+      }
+    } catch (err) {
+      setError((prev) => ({ ...prev, branches: err.message }));
+      console.error("Error fetching branches:", err);
+    } finally {
+      setLoading((prev) => ({ ...prev, branches: false }));
+    }
+  };
+
+  // ---------------------------------------------------------------
+  // Dependent data fetchers (kept — currently UI is commented out)
+  // ---------------------------------------------------------------
   const fetchCustomers = async (branchcode) => {
     if (!branchcode) {
       setCustomers([]);
-      setSelections(prev => ({ ...prev, customer: '', client: '', warehouse: '' }));
+      setSelections((prev) => ({ ...prev, customer: "", client: "", warehouse: "" }));
       return;
     }
-
-    setLoading(prev => ({ ...prev, customers: true }));
-    setError(prev => ({ ...prev, customers: null }));
+    setLoading((prev) => ({ ...prev, customers: true }));
+    setError((prev) => ({ ...prev, customers: null }));
     try {
-      const customerData = await GlobalParameterAPI.getCustomer(user.userData.orgId, branchcode, user.userData.userName);
-      setCustomers(customerData);
-
-      // Only set default if we don't have current global params for this branch
+      const data = await GlobalParameterAPI.getCustomer(
+        user.userData.orgId,
+        branchcode,
+        user.userData.userName
+      );
+      setCustomers(data || []);
       if (!currentGlobalParams || currentGlobalParams.branchcode !== branchcode) {
-        if (customerData.length > 0) {
-          setSelections(prev => ({
-            ...prev,
-            customer: customerData[0].customer || ''
-          }));
+        if (data && data.length > 0) {
+          setSelections((prev) => ({ ...prev, customer: data[0].customer || "" }));
         } else {
-          setSelections(prev => ({ ...prev, customer: '', client: '', warehouse: '' }));
+          setSelections((prev) => ({ ...prev, customer: "", client: "", warehouse: "" }));
         }
       }
     } catch (err) {
-      setError(prev => ({ ...prev, customers: err.message }));
-      console.error('Error fetching customers:', err);
+      setError((prev) => ({ ...prev, customers: err.message }));
     } finally {
-      setLoading(prev => ({ ...prev, customers: false }));
+      setLoading((prev) => ({ ...prev, customers: false }));
     }
   };
 
-  // Fetch clients based on selected branch and customer
   const fetchClients = async (branchcode, customer) => {
     if (!branchcode || !customer) {
       setClients([]);
-      setSelections(prev => ({ ...prev, client: '' }));
+      setSelections((prev) => ({ ...prev, client: "" }));
       return;
     }
-
-    setLoading(prev => ({ ...prev, clients: true }));
-    setError(prev => ({ ...prev, clients: null }));
+    setLoading((prev) => ({ ...prev, clients: true }));
+    setError((prev) => ({ ...prev, clients: null }));
     try {
-      const clientData = await GlobalParameterAPI.getClients(user.userData.orgId, branchcode, user.userData.userName, customer);
-      setClients(clientData);
-
-      // Only set default if we don't have current global params for this branch and customer
-      if (!currentGlobalParams ||
+      const data = await GlobalParameterAPI.getClients(
+        user.userData.orgId,
+        branchcode,
+        user.userData.userName,
+        customer
+      );
+      setClients(data || []);
+      if (
+        !currentGlobalParams ||
         currentGlobalParams.branchcode !== branchcode ||
-        currentGlobalParams.customer !== customer) {
-        if (clientData.length > 0) {
-          setSelections(prev => ({
-            ...prev,
-            client: clientData[0].client || ''
-          }));
+        currentGlobalParams.customer !== customer
+      ) {
+        if (data && data.length > 0) {
+          setSelections((prev) => ({ ...prev, client: data[0].client || "" }));
         } else {
-          setSelections(prev => ({ ...prev, client: '' }));
+          setSelections((prev) => ({ ...prev, client: "" }));
         }
       }
     } catch (err) {
-      setError(prev => ({ ...prev, clients: err.message }));
-      console.error('Error fetching clients:', err);
+      setError((prev) => ({ ...prev, clients: err.message }));
     } finally {
-      setLoading(prev => ({ ...prev, clients: false }));
+      setLoading((prev) => ({ ...prev, clients: false }));
     }
   };
 
-  // Fetch warehouses based on selected branch
   const fetchWarehouses = async (branchcode) => {
     if (!branchcode) {
       setWarehouses([]);
-      setSelections(prev => ({ ...prev, warehouse: '' }));
+      setSelections((prev) => ({ ...prev, warehouse: "" }));
       return;
     }
-
-    setLoading(prev => ({ ...prev, warehouses: true }));
-    setError(prev => ({ ...prev, warehouses: null }));
+    setLoading((prev) => ({ ...prev, warehouses: true }));
+    setError((prev) => ({ ...prev, warehouses: null }));
     try {
-      const warehouseData = await GlobalParameterAPI.getWarehouses(user.userData.orgId, branchcode);
-      setWarehouses(warehouseData);
-
-      // Only set default if we don't have current global params for this branch
+      const data = await GlobalParameterAPI.getWarehouses(
+        user.userData.orgId,
+        branchcode
+      );
+      setWarehouses(data || []);
       if (!currentGlobalParams || currentGlobalParams.branchcode !== branchcode) {
-        if (warehouseData.length > 0) {
-          setSelections(prev => ({
+        if (data && data.length > 0) {
+          setSelections((prev) => ({
             ...prev,
-            warehouse: warehouseData[0].Warehouse || ''
+            warehouse: data[0].Warehouse || data[0].warehouse || "",
           }));
         } else {
-          setSelections(prev => ({ ...prev, warehouse: '' }));
+          setSelections((prev) => ({ ...prev, warehouse: "" }));
         }
       }
     } catch (err) {
-      setError(prev => ({ ...prev, warehouses: err.message }));
-      console.error('Error fetching warehouses:', err);
+      setError((prev) => ({ ...prev, warehouses: err.message }));
     } finally {
-      setLoading(prev => ({ ...prev, warehouses: false }));
+      setLoading((prev) => ({ ...prev, warehouses: false }));
     }
   };
 
+  // ---------------------------------------------------------------
   // Save global parameters
+  // ---------------------------------------------------------------
   const handleApplyChanges = async () => {
-    if (
-      !selections.financialYear ||
-      !selections.branch ||
-      !selections.customer ||
-      !selections.client ||
-      !selections.warehouse
-    ) {
-      setError(prev => ({ ...prev, saving: "Please fill all required fields" }));
+    if (!selections.financialYear || !selections.branch) {
+      setError((prev) => ({ ...prev, saving: "Please fill all required fields" }));
       return;
     }
 
-    setLoading(prev => ({ ...prev, saving: true }));
-    setError(prev => ({ ...prev, saving: null }));
+    setLoading((prev) => ({ ...prev, saving: true }));
+    setError((prev) => ({ ...prev, saving: null }));
     setSuccess(false);
 
     try {
       const selectedBranch = branches.find(
-        item => item.branchcode === selections.branch
+        (item) => item.branchCode === selections.branch
+      );
+      const selectedFY = financialYears.find(
+        (item) => String(item.finYear) === String(selections.financialYear)
       );
 
       const payload = {
-        branch: selectedBranch?.branch || "",
-        branchcode: selections.branch,
-        customer: selections.customer,
-        client: selections.client,
-        finYear: selections.financialYear,
-        warehouse: selections.warehouse,
-        userid: user.userData.usersId,
-        orgId: user.userData.orgId,
+        branch: selectedBranch?.branchId ?? 0,      // ✅ numeric branchId
+        financialYear: selectedFY?.id ?? 0,         // ✅ numeric FY id
+        orgId: Number(user?.userData?.orgId) || 0,
+        userid: String(user?.userData?.usersId ?? ""),
       };
 
       console.log("Saving Payload:", payload);
@@ -262,47 +295,53 @@ const GlobalSelectionDropdown = () => {
       const response = await GlobalParameterAPI.saveGlobalParameters(payload);
 
       if (response.status) {
+        // Human-readable values for other screens
+        localStorage.setItem("branch", selectedBranch?.branch || "");
+        localStorage.setItem("branchcode", selections.branch);
+        localStorage.setItem("finYear", selections.financialYear);
+        localStorage.setItem("customer", selections.customer);
+        localStorage.setItem("client", selections.client);
+        localStorage.setItem("warehouse", selections.warehouse);
+        // IDs for anything that needs them
+        localStorage.setItem("branchId", String(selectedBranch?.branchId ?? ""));
+        localStorage.setItem("financialYearId", String(selectedFY?.id ?? ""));
 
-        // Update localStorage
-        localStorage.setItem("branch", payload.branch);
-        localStorage.setItem("branchcode", payload.branchcode);
-        localStorage.setItem("customer", payload.customer);
-        localStorage.setItem("client", payload.client);
-        localStorage.setItem("finYear", payload.finYear);
-        localStorage.setItem("warehouse", payload.warehouse);
-
-        // Optional: store everything together
         localStorage.setItem("globalParams", JSON.stringify(payload));
 
         setCurrentGlobalParams(payload);
         setSuccess(true);
 
         console.log("Updated localStorage:", payload);
-        window.location.reload(true);
 
-        setTimeout(() => setSuccess(false), 3000);
+        setTimeout(() => {
+          window.location.reload();
+        }, 300);
       } else {
         throw new Error(response.message || "Failed to save global parameters");
       }
     } catch (err) {
-      setError(prev => ({ ...prev, saving: err.message }));
+      setError((prev) => ({ ...prev, saving: err.message }));
       console.error(err);
     } finally {
-      setLoading(prev => ({ ...prev, saving: false }));
+      setLoading((prev) => ({ ...prev, saving: false }));
     }
   };
 
-  // Initial data fetch - first get current global params, then other data
+  // ---------------------------------------------------------------
+  // Initial data: FY → Branches → Current Params
+  // (order matters so prefill can resolve ids → display codes)
+  // ---------------------------------------------------------------
   useEffect(() => {
     const initializeData = async () => {
-      await fetchCurrentGlobalParameters();
       await fetchFinancialYears();
       await fetchBranches();
+      await fetchCurrentGlobalParameters();
     };
     initializeData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Fetch dependent data when branch is set (from current global params or user selection)
+  // Dependent data on branch change (UI currently commented)
   useEffect(() => {
     if (selections.branch) {
       fetchCustomers(selections.branch);
@@ -310,75 +349,58 @@ const GlobalSelectionDropdown = () => {
     } else {
       setCustomers([]);
       setWarehouses([]);
-      setSelections(prev => ({ ...prev, customer: '', client: '', warehouse: '' }));
+      setSelections((prev) => ({ ...prev, customer: "", client: "", warehouse: "" }));
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selections.branch]);
 
-  // Fetch clients when customer changes
+  // Dependent data on customer change (UI currently commented)
   useEffect(() => {
     if (selections.branch && selections.customer) {
       fetchClients(selections.branch, selections.customer);
     } else {
       setClients([]);
-      setSelections(prev => ({ ...prev, client: '' }));
+      setSelections((prev) => ({ ...prev, client: "" }));
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selections.branch, selections.customer]);
 
+  // ---------------------------------------------------------------
+  // Helpers
+  // ---------------------------------------------------------------
   const handleSelectionChange = (key, value) => {
-    setSelections(prev => ({
-      ...prev,
-      [key]: value
-    }));
-    // Clear success message when user changes selection
+    setSelections((prev) => ({ ...prev, [key]: value }));
     if (success) setSuccess(false);
-    if (error.saving) setError(prev => ({ ...prev, saving: null }));
+    if (error.saving) setError((prev) => ({ ...prev, saving: null }));
   };
 
   const formatFinancialYear = (finYear) => {
-    return `${finYear}-${parseInt(finYear) + 1}`;
+    if (finYear == null) return "";
+    return `${finYear}-${parseInt(finYear, 10) + 1}`;
   };
 
-  const getCustomerName = (customer) => {
-    return customer.customer || customer.customerName || customer.name || `Customer ${customer.id}`;
-  };
+  const getCustomerName = (c) =>
+    c.customer || c.customerName || c.name || `Customer ${c.id}`;
+  const getCustomerValue = (c) =>
+    c.customer || c.customerCode || c.id?.toString() || "";
 
-  const getCustomerValue = (customer) => {
-    return customer.customer || customer.customerCode || customer.id?.toString() || '';
-  };
+  const getBranchName = (b) =>
+    b.branch || b.branchName || b.branchCode || `Branch ${b.branchId}`;
+  const getBranchValue = (b) => b.branchCode || String(b.branchId ?? "");
 
-  const getBranchName = (branch) => {
-    return branch.branch || branch.branchName || branch.branchcode || `Branch ${branch.branchcode}`;
-  };
+  const getClientName = (c) =>
+    c.client || c.clientName || c.name || `Client ${c.id}`;
+  const getClientValue = (c) =>
+    c.client || c.clientCode || c.id?.toString() || "";
 
-  const getBranchValue = (branch) => {
-    return branch.branchcode || branch.id?.toString() || '';
-  };
+  const getWarehouseName = (w) =>
+    w.Warehouse || w.warehouse || w.name || `Warehouse ${w.id}`;
+  const getWarehouseValue = (w) =>
+    w.Warehouse || w.warehouse || w.id?.toString() || "";
 
-  const getClientName = (client) => {
-    return client.client || client.clientName || client.name || `Client ${client.id}`;
-  };
-
-  const getClientValue = (client) => {
-    return client.client || client.clientCode || client.id?.toString() || '';
-  };
-
-  const getWarehouseName = (warehouse) => {
-    return warehouse.Warehouse || warehouse.warehouse || warehouse.name || `Warehouse ${warehouse.id}`;
-  };
-
-  const getWarehouseValue = (warehouse) => {
-    return warehouse.Warehouse || warehouse.warehouse || warehouse.id?.toString() || '';
-  };
-
-  // Show current settings in the dropdown header
-  const getCurrentSettingsText = () => {
-    if (loading.globalParams) return "Loading current settings...";
-    if (currentGlobalParams) {
-      return `Current: ${currentGlobalParams.branch} - ${currentGlobalParams.customer}`;
-    }
-    return "Global Selections";
-  };
-
+  // ---------------------------------------------------------------
+  // Render
+  // ---------------------------------------------------------------
   return (
     <div className="relative group">
       <button
@@ -386,15 +408,10 @@ const GlobalSelectionDropdown = () => {
         aria-label="Global selections"
       >
         <Globe className="h-5 w-5 text-gray-600 dark:text-gray-400" />
-        {/* <ChevronDown className="h-4 w-4 text-gray-400" /> */}
       </button>
 
       <div className="absolute top-full right-0 mt-2 w-80 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
         <div className="p-4 space-y-4">
-          {/* <div className="text-sm font-semibold text-gray-900 dark:text-white mb-2">
-            {getCurrentSettingsText()}
-          </div> */}
-
           {/* Loading state for global parameters */}
           {loading.globalParams && (
             <div className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 text-center">
@@ -431,18 +448,22 @@ const GlobalSelectionDropdown = () => {
             ) : (
               <select
                 value={selections.financialYear}
-                onChange={(e) => handleSelectionChange('financialYear', e.target.value)}
+                onChange={(e) => handleSelectionChange("financialYear", e.target.value)}
                 className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               >
                 <option value="">Select Financial Year</option>
                 {financialYears.map((year) => (
                   <option
-                    key={year.id}
+                    key={year.id ?? year.finYear}
                     value={year.finYear}
-                    className={year.currentFinYear ? 'font-semibold bg-blue-50 dark:bg-blue-900/30' : ''}
+                    className={
+                      year.currentFinYear
+                        ? "font-semibold bg-blue-50 dark:bg-blue-900/30"
+                        : ""
+                    }
                   >
                     {formatFinancialYear(year.finYear)}
-                    {year.currentFinYear}
+                    {year.currentFinYear ? " (Current)" : ""}
                   </option>
                 ))}
               </select>
@@ -471,140 +492,16 @@ const GlobalSelectionDropdown = () => {
             ) : (
               <select
                 value={selections.branch}
-                onChange={(e) => handleSelectionChange('branch', e.target.value)}
+                onChange={(e) => handleSelectionChange("branch", e.target.value)}
                 className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               >
                 <option value="">Select Branch</option>
                 {branches.map((branch) => (
                   <option
-                    key={getBranchValue(branch)}
+                    key={branch.branchId ?? branch.branchCode}
                     value={getBranchValue(branch)}
                   >
                     {getBranchName(branch)}
-                  </option>
-                ))}
-              </select>
-            )}
-          </div>
-
-          {/* Customer Dropdown */}
-          <div>
-            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Customer
-            </label>
-            {loading.customers ? (
-              <div className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400">
-                Loading customers...
-              </div>
-            ) : error.customers ? (
-              <div className="w-full px-3 py-2 text-sm border border-red-300 dark:border-red-600 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400">
-                Error: {error.customers}
-                <button
-                  onClick={() => fetchCustomers(selections.branch)}
-                  className="ml-2 text-xs underline hover:text-red-700 dark:hover:text-red-300"
-                >
-                  Retry
-                </button>
-              </div>
-            ) : (
-              <select
-                value={selections.customer}
-                onChange={(e) => handleSelectionChange('customer', e.target.value)}
-                disabled={!selections.branch}
-                className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:text-gray-500"
-              >
-                <option value="">
-                  {!selections.branch ? 'Select branch first' : 'Select Customer'}
-                </option>
-                {customers.map((customer) => (
-                  <option
-                    key={getCustomerValue(customer)}
-                    value={getCustomerValue(customer)}
-                  >
-                    {getCustomerName(customer)}
-                  </option>
-                ))}
-              </select>
-            )}
-          </div>
-
-          {/* Client Dropdown */}
-          <div>
-            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Client
-            </label>
-            {loading.clients ? (
-              <div className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400">
-                Loading clients...
-              </div>
-            ) : error.clients ? (
-              <div className="w-full px-3 py-2 text-sm border border-red-300 dark:border-red-600 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400">
-                Error: {error.clients}
-                <button
-                  onClick={() => fetchClients(selections.branch, selections.customer)}
-                  className="ml-2 text-xs underline hover:text-red-700 dark:hover:text-red-300"
-                >
-                  Retry
-                </button>
-              </div>
-            ) : (
-              <select
-                value={selections.client}
-                onChange={(e) => handleSelectionChange('client', e.target.value)}
-                disabled={!selections.branch || !selections.customer}
-                className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:text-gray-500"
-              >
-                <option value="">
-                  {!selections.branch ? 'Select branch first' :
-                    !selections.customer ? 'Select customer first' : 'Select Client'}
-                </option>
-                {clients.map((client) => (
-                  <option
-                    key={getClientValue(client)}
-                    value={getClientValue(client)}
-                  >
-                    {getClientName(client)}
-                  </option>
-                ))}
-              </select>
-            )}
-          </div>
-
-          {/* Warehouse Dropdown */}
-          <div>
-            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Warehouse
-            </label>
-            {loading.warehouses ? (
-              <div className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400">
-                Loading warehouses...
-              </div>
-            ) : error.warehouses ? (
-              <div className="w-full px-3 py-2 text-sm border border-red-300 dark:border-red-600 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400">
-                Error: {error.warehouses}
-                <button
-                  onClick={() => fetchWarehouses(selections.branch)}
-                  className="ml-2 text-xs underline hover:text-red-700 dark:hover:text-red-300"
-                >
-                  Retry
-                </button>
-              </div>
-            ) : (
-              <select
-                value={selections.warehouse}
-                onChange={(e) => handleSelectionChange('warehouse', e.target.value)}
-                disabled={!selections.branch}
-                className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:text-gray-500"
-              >
-                <option value="">
-                  {!selections.branch ? 'Select branch first' : 'Select Warehouse'}
-                </option>
-                {warehouses.map((warehouse) => (
-                  <option
-                    key={getWarehouseValue(warehouse)}
-                    value={getWarehouseValue(warehouse)}
-                  >
-                    {getWarehouseName(warehouse)}
                   </option>
                 ))}
               </select>
@@ -631,11 +528,9 @@ const GlobalSelectionDropdown = () => {
             </div>
           )}
 
-          {/* Change Button */}
+          {/* Apply Changes */}
           <button
             onClick={handleApplyChanges}
-            // disabled={loading.globalParams || loading.financialYears || loading.customers || loading.branches || loading.clients || loading.warehouses || loading.saving || 
-            //          !selections.financialYear || !selections.customer || !selections.branch || !selections.client || !selections.warehouse}
             className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white py-2 px-4 rounded-lg text-sm font-medium transition-colors duration-200 flex items-center justify-center"
           >
             {loading.saving ? (
@@ -644,7 +539,7 @@ const GlobalSelectionDropdown = () => {
                 Saving...
               </>
             ) : (
-              'Apply Changes'
+              "Apply Changes"
             )}
           </button>
         </div>

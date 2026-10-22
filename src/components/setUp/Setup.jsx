@@ -32,7 +32,7 @@ const Setup = () => {
   const userType = localStorage.getItem("userType")?.toUpperCase();
 
   const filteredItems = SETUP_ITEMS.filter((item) => {
-    if (userType === "SADMIN") {
+    if (userType === "SADMIN" || userType === "SUPERADMIN") {
       return item.sadminOnly === true;
     }
 

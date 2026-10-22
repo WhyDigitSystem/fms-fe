@@ -9,14 +9,6 @@ const CityMasterForm = ({ onBack, onSave, editData }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { addToast } = useToast();
 
-  // Use globalParams similar to StateForm
-  const globalParam = JSON.parse(localStorage.getItem("globalParams") || "{}");
-
-  const loginBranchCode = globalParam?.branchcode || localStorage.getItem("branchcode") || "";
-  const loginBranch = globalParam?.branch || localStorage.getItem("branch") || "";
-  const loginWarehouse = globalParam?.warehouse || localStorage.getItem("warehouse") || "";
-  const loginCustomer = globalParam?.customer || localStorage.getItem("customer") || "";
-  const loginClient = globalParam?.client || localStorage.getItem("client") || "";
   const loginUserName = localStorage.getItem("userName") || "SYSTEM";
 
   const [countries, setCountries] = useState([]);
@@ -27,22 +19,16 @@ const CityMasterForm = ({ onBack, onSave, editData }) => {
     id: editData?.id || 0,
     cityName: editData?.cityName || "",
     cityCode: editData?.cityCode || "",
-    country: editData?.country || "",
-    state: editData?.state || "",
-    active: editData?.active ?? true,
-    cancel: editData?.cancel ?? false,
-
-    // Additional fields from localStorage
-    branch: editData?.branch || loginBranch,
-    branchCode: editData?.branchCode || loginBranchCode,
-    warehouse: editData?.warehouse || loginWarehouse,
-    customer: editData?.customer || loginCustomer,
-    client: editData?.client || loginClient,
+    country: "", // resolved to country id
+    state: "",   // resolved to state id
+    active:
+      editData?.active === "Active" ||
+      editData?.active === true ||
+      (editData == null ? true : false),
     orgId: ORG_ID,
-    createdBy: localStorage.getItem("userName") || "SYSTEM",
+    createdBy: loginUserName,
   });
 
-  // Field labels for toast messages
   const fieldLabels = {
     cityName: "City Name",
     cityCode: "City Code",
@@ -50,42 +36,97 @@ const CityMasterForm = ({ onBack, onSave, editData }) => {
     state: "State",
   };
 
-  // Initialize data on component mount
-  useEffect(() => {
-    fetchCountries();
-    if (editData?.country) {
-      fetchStatesByCountry(editData.country);
-    }
-  }, []);
+  // ---------------------------------------------------------------
+  // Helpers: resolve editData objects/strings/ids to numeric ids
+  // ---------------------------------------------------------------
+  const resolveId = (value, list, nameKeys = []) => {
+    if (value == null || value === "") return "";
+    if (typeof value === "number") return value;
+    if (typeof value === "object" && value.id != null) return value.id;
 
+    const str = String(value).toUpperCase();
+    const match =
+      list.find((row) => String(row.id) === str) ||
+      list.find((row) =>
+        nameKeys.some((k) => (row[k] || "").toUpperCase() === str)
+      );
+
+    return match?.id ?? "";
+  };
+
+  const resolveCountryId = (v, list) =>
+    resolveId(v, list, ["countryName", "country", "countryCode"]);
+  const resolveStateId = (v, list) =>
+    resolveId(v, list, ["stateName", "state", "stateCode"]);
+
+  // ---------------------------------------------------------------
+  // Fetch helpers
+  // ---------------------------------------------------------------
   const fetchCountries = async () => {
     try {
-      const countriesData = await masterAPI.getCountries(ORG_ID);
-      const sortedCountries = countriesData.sort((a, b) =>
-        a.countryName.localeCompare(b.countryName)
+      const list = await masterAPI.getCountries(ORG_ID);
+      const sorted = [...list].sort((a, b) =>
+        (a.countryName || a.country || "").localeCompare(
+          b.countryName || b.country || ""
+        )
       );
-      setCountries(sortedCountries);
+      setCountries(sorted);
+      return sorted;
     } catch (error) {
       console.error("Error fetching countries:", error);
-      addToast("Failed to load countries", 'error');
+      addToast("Failed to load countries", "error");
+      return [];
     }
   };
 
-  const fetchStatesByCountry = async (countryName) => {
+  const fetchStatesByCountry = async (countryId) => {
+    if (!countryId) {
+      setStates([]);
+      return [];
+    }
     try {
-      const statesData = await masterAPI.getState(ORG_ID, countryName);
-      const sortedStates = statesData.sort((a, b) =>
-        a.stateName.localeCompare(b.stateName)
+      const list = await masterAPI.getStateByCountry(countryId, ORG_ID);
+      const sorted = [...list].sort((a, b) =>
+        (a.stateName || "").localeCompare(b.stateName || "")
       );
-      setStates(sortedStates);
+      setStates(sorted);
+      return sorted;
     } catch (error) {
       console.error("Error fetching states:", error);
-      addToast("Failed to load states", 'error');
+      addToast("Failed to load states", "error");
+      return [];
     }
   };
 
+  // ---------------------------------------------------------------
+  // Initialize data
+  // ---------------------------------------------------------------
+  useEffect(() => {
+    const init = async () => {
+      const countriesList = await fetchCountries();
+
+      if (editData) {
+        const countryId = resolveCountryId(editData.country, countriesList);
+        if (countryId) {
+          const statesList = await fetchStatesByCountry(countryId);
+          const stateId = resolveStateId(editData.state, statesList);
+          setForm((prev) => ({
+            ...prev,
+            country: countryId,
+            state: stateId,
+          }));
+        }
+      }
+    };
+    init();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editData?.id]);
+
+  // ---------------------------------------------------------------
+  // Change handlers
+  // ---------------------------------------------------------------
   const handleChange = (e) => {
-    const { name, value, type, checked } = e.target;
+    const { name, value, checked } = e.target;
 
     if (fieldErrors[name]) {
       setFieldErrors((prev) => ({ ...prev, [name]: "" }));
@@ -96,33 +137,30 @@ const CityMasterForm = ({ onBack, onSave, editData }) => {
 
     let errorMessage = "";
 
-    if (name === "active" || name === "cancel") {
-      setForm(prev => ({ ...prev, [name]: checked }));
+    if (name === "active") {
+      setForm((prev) => ({ ...prev, active: checked }));
       return;
     }
 
     switch (name) {
       case "cityName":
-        if (!nameRegex.test(value)) {
+        if (!nameRegex.test(value))
           errorMessage = "Only alphabets and spaces are allowed";
-        }
         break;
       case "cityCode":
-        if (!alphanumericRegex.test(value)) {
+        if (!alphanumericRegex.test(value))
           errorMessage = "Only alphanumeric characters are allowed";
-        } else if (value.length > 10) {
+        else if (value.length > 10)
           errorMessage = "City Code must be maximum 10 characters";
-        }
         break;
       default:
         break;
     }
 
     if (errorMessage) {
-      setFieldErrors(prev => ({ ...prev, [name]: errorMessage }));
+      setFieldErrors((prev) => ({ ...prev, [name]: errorMessage }));
     } else {
-      const updatedValue = value.toUpperCase();
-      setForm(prev => ({ ...prev, [name]: updatedValue }));
+      setForm((prev) => ({ ...prev, [name]: value.toUpperCase() }));
     }
   };
 
@@ -132,117 +170,111 @@ const CityMasterForm = ({ onBack, onSave, editData }) => {
     }
 
     if (name === "country") {
-      setForm(prev => ({
-        ...prev,
-        [name]: value,
-        state: "" // Reset state when country changes
-      }));
-      setStates([]); // Clear states
-
-      // Fetch states for selected country
-      if (value) {
-        await fetchStatesByCountry(value);
-      }
+      setForm((prev) => ({ ...prev, country: value, state: "" }));
+      setStates([]);
+      if (value) await fetchStatesByCountry(value);
     } else {
-      setForm(prev => ({ ...prev, [name]: value }));
+      setForm((prev) => ({ ...prev, [name]: value }));
     }
   };
 
+  // ---------------------------------------------------------------
+  // Save
+  // ---------------------------------------------------------------
   const handleSave = async () => {
     const errors = {};
 
     if (!form.cityName.trim()) errors.cityName = "City Name is required";
     if (!form.cityCode.trim()) errors.cityCode = "City Code is required";
-    if (!form.country) errors.country = "Country is required";
-    if (!form.state) errors.state = "State is required";
+    if (form.country === "" || form.country == null)
+      errors.country = "Country is required";
+    if (form.state === "" || form.state == null)
+      errors.state = "State is required";
 
-    // Validate lengths
-    if (form.cityCode && form.cityCode.length > 10) errors.cityCode = "City Code must be maximum 10 characters";
+    if (form.cityCode && form.cityCode.length > 10)
+      errors.cityCode = "City Code must be maximum 10 characters";
 
     setFieldErrors(errors);
 
     if (Object.keys(errors).length > 0) {
       const firstErrorField = Object.keys(errors)[0];
       const fieldLabel = fieldLabels[firstErrorField] || firstErrorField;
-      const errorMessage = errors[firstErrorField];
-
-      addToast(`${fieldLabel}: ${errorMessage}`, 'error');
+      addToast(`${fieldLabel}: ${errors[firstErrorField]}`, "error");
       return;
     }
 
     setIsSubmitting(true);
 
+    // Payload — country and state are numeric ids
     const payload = {
-      cityName: form.cityName,
-      cityCode: form.cityCode,
-      country: form.country,
-      state: form.state,
       active: Boolean(form.active),
-      cancel: Boolean(form.cancel),
-
-      // Additional fields from localStorage
-      branch: form.branch,
-      branchCode: form.branchCode,
-      warehouse: form.warehouse,
-      customer: form.customer,
-      client: form.client,
-      orgId: form.orgId,
-      createdBy: form.createdBy,
+      cityCode: form.cityCode,
+      cityName: form.cityName,
+      country: Number(form.country) || 0,
+      state: Number(form.state) || 0,
+      createdBy: form.createdBy || loginUserName,
+      orgId: ORG_ID,
     };
 
-    // Only add id to payload if we're editing (id exists and is greater than 0)
+    // id only when updating
     if (form.id && form.id > 0) {
       payload.id = form.id;
     }
 
-    console.log("📤 Saving City Payload:", payload);
+    console.log("📤 Saving City Payload:", JSON.stringify(payload, null, 2));
 
     try {
       const response = await masterAPI.saveCity(payload);
       console.log("📥 Save Response:", response);
 
-      // Check response status
-      const status = response?.status === true || response?.statusFlag === "Ok";
+      const status =
+        response?.status === true || response?.statusFlag === "Ok";
 
       if (status) {
-        const successMessage = response?.paramObjectsMap?.message ||
-          (form.id && form.id > 0 ? "City updated successfully!" : "City created successfully!");
-
-        addToast(successMessage, 'success');
-
+        const successMessage =
+          response?.paramObjectsMap?.message ||
+          (form.id && form.id > 0
+            ? "City updated successfully!"
+            : "City created successfully!");
+        addToast(successMessage, "success");
         if (onSave) onSave(payload);
       } else {
-        const errorMessage = response?.paramObjectsMap?.message ||
+        const errorMessage =
+          response?.paramObjectsMap?.message ||
           response?.paramObjectsMap?.errorMessage ||
           response?.message ||
           "Failed to save city";
-
-        addToast(errorMessage, 'error');
+        addToast(errorMessage, "error");
       }
     } catch (error) {
       console.error("❌ Save Error:", error);
-      const errorMessage = error.response?.data?.paramObjectsMap?.message ||
+      const errorMessage =
+        error.response?.data?.paramObjectsMap?.message ||
         error.response?.data?.paramObjectsMap?.errorMessage ||
         error.response?.data?.message ||
         "Save failed! Try again.";
-
-      addToast(errorMessage, 'error');
+      addToast(errorMessage, "error");
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  // Options
-  const countryOptions = countries.map(country => ({
-    value: country.countryName,
-    label: country.countryName
+  // ---------------------------------------------------------------
+  // Options — value is the numeric id
+  // ---------------------------------------------------------------
+  const countryOptions = countries.map((country) => ({
+    value: country.id,
+    label: country.countryName || country.country,
   }));
 
-  const stateOptions = states.map(state => ({
-    value: state.stateName,
-    label: state.stateName
+  const stateOptions = states.map((state) => ({
+    value: state.id,
+    label: state.stateName,
   }));
 
+  // ---------------------------------------------------------------
+  // Render
+  // ---------------------------------------------------------------
   return (
     <div className="p-4 max-w-7xl mx-auto">
       {/* HEADER */}
@@ -260,7 +292,6 @@ const CityMasterForm = ({ onBack, onSave, editData }) => {
 
       {/* MAIN CARD */}
       <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
-        {/* MAIN FORM GRID */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
           <FloatingInput
             label="City Name *"
@@ -301,7 +332,7 @@ const CityMasterForm = ({ onBack, onSave, editData }) => {
             disabled={!form.country}
           />
 
-          {/* STATUS & CANCEL CHECKBOXES */}
+          {/* ACTIVE CHECKBOX */}
           <div className="flex flex-col gap-3 p-2">
             <div className="flex items-center gap-2">
               <input
@@ -315,7 +346,6 @@ const CityMasterForm = ({ onBack, onSave, editData }) => {
                 Active
               </span>
             </div>
-
           </div>
         </div>
 
@@ -334,7 +364,7 @@ const CityMasterForm = ({ onBack, onSave, editData }) => {
             className="flex items-center gap-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Save className="h-3 w-3" />
-            {isSubmitting ? "Saving..." : (editData ? "Update" : "Save")}
+            {isSubmitting ? "Saving..." : editData ? "Update" : "Save"}
           </button>
         </div>
       </div>

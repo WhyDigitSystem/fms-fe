@@ -9,14 +9,19 @@ const StateMasterForm = ({ onBack, onSave, editData }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { addToast } = useToast();
 
-  // Use globalParams similar to SupplierForm
+  // Global params (kept for parity with other forms)
   const globalParam = JSON.parse(localStorage.getItem("globalParams") || "{}");
 
-  const loginBranchCode = globalParam?.branchcode || localStorage.getItem("branchcode") || "";
-  const loginBranch = globalParam?.branch || localStorage.getItem("branch") || "";
-  const loginWarehouse = globalParam?.warehouse || localStorage.getItem("warehouse") || "";
-  const loginCustomer = globalParam?.customer || localStorage.getItem("customer") || "";
-  const loginClient = globalParam?.client || localStorage.getItem("client") || "";
+  const loginBranchCode =
+    globalParam?.branchcode || localStorage.getItem("branchcode") || "";
+  const loginBranch =
+    globalParam?.branch || localStorage.getItem("branch") || "";
+  const loginWarehouse =
+    globalParam?.warehouse || localStorage.getItem("warehouse") || "";
+  const loginCustomer =
+    globalParam?.customer || localStorage.getItem("customer") || "";
+  const loginClient =
+    globalParam?.client || localStorage.getItem("client") || "";
   const loginUserName = localStorage.getItem("userName") || "SYSTEM";
 
   const [countries, setCountries] = useState([]);
@@ -27,19 +32,22 @@ const StateMasterForm = ({ onBack, onSave, editData }) => {
     stateName: editData?.stateName || "",
     stateCode: editData?.stateCode || "",
     stateNumber: editData?.stateNumber || "",
-    country: editData?.country || "",
+    country: "", // resolved to country id after countries load
     region: editData?.region || "",
-    active: editData?.active ?? true,
+    active:
+      editData?.active === "Active" ||
+      editData?.active === true ||
+      (editData == null ? true : false),
     cancel: editData?.cancel ?? false,
 
-    // Additional fields from localStorage
+    // Additional context fields
     branch: editData?.branch || loginBranch,
     branchCode: editData?.branchCode || loginBranchCode,
     warehouse: editData?.warehouse || loginWarehouse,
     customer: editData?.customer || loginCustomer,
     client: editData?.client || loginClient,
     orgId: ORG_ID,
-    createdBy: localStorage.getItem("userName") || "SYSTEM",
+    createdBy: loginUserName,
   });
 
   // Field labels for toast messages
@@ -51,26 +59,83 @@ const StateMasterForm = ({ onBack, onSave, editData }) => {
     region: "Region",
   };
 
-  // Initialize data on component mount
+  // ---------------------------------------------------------------
+  // Initialize data
+  // ---------------------------------------------------------------
   useEffect(() => {
-    fetchCountries();
+    const init = async () => {
+      await fetchCountries();
+    };
+    init();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Once countries are loaded, resolve editData.country (object OR name OR id) → id
+  useEffect(() => {
+    if (!countries.length) return;
+
+    if (editData) {
+      const resolved = resolveCountryId(editData.country, countries);
+      setForm((prev) => ({ ...prev, country: resolved }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [countries]);
+
+  /**
+   * Resolve a country value from editData to a numeric country id.
+   * Handles:
+   *   - id (number)        → returns as-is
+   *   - { id, country }    → returns value.id  (new getStateById shape)
+   *   - "INDIA" / "IND"    → looks up by countryName / countryCode
+   */
+  const resolveCountryId = (value, list) => {
+    if (value == null || value === "") return "";
+    if (typeof value === "number") return value;
+    if (typeof value === "object" && value.id != null) return value.id;
+
+    const str = String(value).toUpperCase();
+    const match =
+      list.find((c) => String(c.id) === str) ||
+      list.find(
+        (c) =>
+          (c.countryName || c.country || "").toUpperCase() === str
+      ) ||
+      list.find((c) => (c.countryCode || "").toUpperCase() === str);
+
+    return match?.id ?? "";
+  };
+
+  // ---------------------------------------------------------------
+  // Fetch countries
+  // ---------------------------------------------------------------
   const fetchCountries = async () => {
     try {
-      const countriesData = await stateAPI.getCountries(ORG_ID);
-      const sortedCountries = countriesData.sort((a, b) =>
-        a.countryName.localeCompare(b.countryName)
+      const raw = await stateAPI.getCountries(ORG_ID);
+
+      // Support {paramObjectsMap:{countryVO:[...]}} | data.… | flat array
+      const list =
+        raw?.paramObjectsMap?.countryVO ||
+        raw?.data?.paramObjectsMap?.countryVO ||
+        (Array.isArray(raw) ? raw : []);
+
+      const sorted = [...list].sort((a, b) =>
+        (a.countryName || a.country || "").localeCompare(
+          b.countryName || b.country || ""
+        )
       );
-      setCountries(sortedCountries);
+
+      setCountries(sorted);
     } catch (error) {
       console.error("Error fetching countries:", error);
-      addToast("Failed to load countries", 'error');
+      addToast("Failed to load countries", "error");
     }
   };
 
+  // ---------------------------------------------------------------
+  // Change handlers
+  // ---------------------------------------------------------------
   const handleChange = (e) => {
-    const { name, value, type, checked } = e.target;
+    const { name, value, checked } = e.target;
 
     if (fieldErrors[name]) {
       setFieldErrors((prev) => ({ ...prev, [name]: "" }));
@@ -83,7 +148,7 @@ const StateMasterForm = ({ onBack, onSave, editData }) => {
     let errorMessage = "";
 
     if (name === "active" || name === "cancel") {
-      setForm(prev => ({ ...prev, [name]: checked }));
+      setForm((prev) => ({ ...prev, [name]: checked }));
       return;
     }
 
@@ -113,10 +178,9 @@ const StateMasterForm = ({ onBack, onSave, editData }) => {
     }
 
     if (errorMessage) {
-      setFieldErrors(prev => ({ ...prev, [name]: errorMessage }));
+      setFieldErrors((prev) => ({ ...prev, [name]: errorMessage }));
     } else {
-      const updatedValue = value.toUpperCase();
-      setForm(prev => ({ ...prev, [name]: updatedValue }));
+      setForm((prev) => ({ ...prev, [name]: value.toUpperCase() }));
     }
   };
 
@@ -124,91 +188,107 @@ const StateMasterForm = ({ onBack, onSave, editData }) => {
     if (fieldErrors[name]) {
       setFieldErrors((prev) => ({ ...prev, [name]: "" }));
     }
-    setForm(prev => ({ ...prev, [name]: value }));
+    setForm((prev) => ({ ...prev, [name]: value }));
   };
 
+  // ---------------------------------------------------------------
+  // Save
+  // ---------------------------------------------------------------
   const handleSave = async () => {
     const errors = {};
 
     if (!form.stateName.trim()) errors.stateName = "State Name is required";
     if (!form.stateCode.trim()) errors.stateCode = "State Code is required";
-    if (!form.country) errors.country = "Country is required";
+    if (form.country === "" || form.country == null)
+      errors.country = "Country is required";
     if (!form.region.trim()) errors.region = "Region is required";
 
-    if (form.stateCode && form.stateCode.length > 10) errors.stateCode = "State Code must be maximum 10 characters";
-    if (form.stateNumber && form.stateNumber.length > 10) errors.stateNumber = "State Number must be maximum 10 digits";
+    if (form.stateCode && form.stateCode.length > 10)
+      errors.stateCode = "State Code must be maximum 10 characters";
+    if (form.stateNumber && form.stateNumber.length > 10)
+      errors.stateNumber = "State Number must be maximum 10 digits";
 
     setFieldErrors(errors);
 
     if (Object.keys(errors).length > 0) {
       const firstErrorField = Object.keys(errors)[0];
       const fieldLabel = fieldLabels[firstErrorField] || firstErrorField;
-      const errorMessage = errors[firstErrorField];
-
-      addToast(`${fieldLabel}: ${errorMessage}`, 'error');
+      addToast(`${fieldLabel}: ${errors[firstErrorField]}`, "error");
       return;
     }
 
     setIsSubmitting(true);
 
+    // Base payload — country is numeric id
     const payload = {
-      stateName: form.stateName,
-      stateCode: form.stateCode,
-      stateNumber: form.stateNumber,
-      country: form.country,
-      region: form.region,
       active: Boolean(form.active),
-      cancel: Boolean(form.cancel),
-      createdBy: form.createdBy,
-      orgId: form.orgId
+      country: Number(form.country) || 0,
+      createdBy: form.createdBy || loginUserName,
+      region: form.region,
+      stateCode: form.stateCode,
+      stateName: form.stateName,
+      stateNumber: form.stateNumber,
+      orgId: ORG_ID,
     };
 
+    // Only include id when updating (never for create)
     if (form.id && form.id > 0) {
       payload.id = form.id;
     }
 
-    console.log("📤 Saving State Payload:", payload);
+    console.log("📤 Saving State Payload:", JSON.stringify(payload, null, 2));
 
     try {
       const response = await stateAPI.createState(payload);
       console.log("📥 Response:", response);
 
-      const status = response?.status === true || response?.statusFlag === "Ok";
+      const status =
+        response?.status === true || response?.statusFlag === "Ok";
 
       if (status) {
-        const successMessage = response?.paramObjectsMap?.message ||
-          (form.id && form.id > 0 ? "State updated successfully!" : "State created successfully!");
+        const successMessage =
+          response?.paramObjectsMap?.message ||
+          (form.id && form.id > 0
+            ? "State updated successfully!"
+            : "State created successfully!");
 
-        addToast(successMessage, 'success');
+        addToast(successMessage, "success");
 
         if (onSave) onSave(payload);
       } else {
-        const errorMessage = response?.paramObjectsMap?.message ||
+        const errorMessage =
+          response?.paramObjectsMap?.message ||
           response?.paramObjectsMap?.errorMessage ||
           response?.message ||
           "Failed to save state";
 
-        addToast(errorMessage, 'error');
+        addToast(errorMessage, "error");
       }
     } catch (error) {
       console.error("❌ Save Error:", error);
-      const errorMessage = error.response?.data?.paramObjectsMap?.message ||
+      const errorMessage =
+        error.response?.data?.paramObjectsMap?.message ||
         error.response?.data?.paramObjectsMap?.errorMessage ||
         error.response?.data?.message ||
         "Save failed! Try again.";
 
-      addToast(errorMessage, 'error');
+      addToast(errorMessage, "error");
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  // Options
-  const countryOptions = countries.map(country => ({
-    value: country.countryName,
-    label: country.countryName
+  // ---------------------------------------------------------------
+  // Country options — value is id (number), label is name
+  // ---------------------------------------------------------------
+  const countryOptions = countries.map((country) => ({
+    value: country.id,
+    label: country.countryName || country.country,
   }));
 
+  // ---------------------------------------------------------------
+  // Render
+  // ---------------------------------------------------------------
   return (
     <div className="p-4 max-w-7xl mx-auto">
       {/* HEADER */}
@@ -226,7 +306,6 @@ const StateMasterForm = ({ onBack, onSave, editData }) => {
 
       {/* MAIN CARD */}
       <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
-        {/* MAIN FORM GRID */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
           <FloatingInput
             label="State Name *"
@@ -274,7 +353,7 @@ const StateMasterForm = ({ onBack, onSave, editData }) => {
             required
           />
 
-          {/* STATUS & CANCEL CHECKBOXES */}
+          {/* STATUS CHECKBOX */}
           <div className="flex flex-col gap-3 p-2">
             <div className="flex items-center gap-2">
               <input
@@ -288,8 +367,6 @@ const StateMasterForm = ({ onBack, onSave, editData }) => {
                 Active
               </span>
             </div>
-
-
           </div>
         </div>
 
@@ -308,7 +385,7 @@ const StateMasterForm = ({ onBack, onSave, editData }) => {
             className="flex items-center gap-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Save className="h-3 w-3" />
-            {isSubmitting ? "Saving..." : (editData ? "Update" : "Save")}
+            {isSubmitting ? "Saving..." : editData ? "Update" : "Save"}
           </button>
         </div>
       </div>

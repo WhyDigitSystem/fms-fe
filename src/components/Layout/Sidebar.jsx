@@ -55,7 +55,7 @@ const Sidebar = () => {
 
   const filteredNavigation = navigation.filter((item) => {
     if (isSAdmin) {
-      return item.screenCode === "SETUP";
+      return item.screenCode === "SETUP" || userType === "SUPERADMIN";
     }
 
     return hasScreenAccess(item.screenCode);
