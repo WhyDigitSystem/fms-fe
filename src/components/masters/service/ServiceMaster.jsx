@@ -1,5 +1,5 @@
 import { useState } from "react";
-import ServiceMasterList from "./ServiceMasterList ";
+import ServiceMasterList from "./ServiceMasterList "; // note: no trailing space in the file name
 import ServiceMasterForm from "./ServiceMasterForm";
 
 export default function ServiceMaster() {
@@ -32,7 +32,7 @@ export default function ServiceMaster() {
           refreshTrigger={refreshTrigger}
         />
       ) : (
-        <ServiceMasterForm editData={editData} onBack={handleBack} />
+        <ServiceMasterForm data={editData} onBack={handleBack} />
       )}
     </>
   );

@@ -1,41 +1,65 @@
-import { ArrowLeft, Save, X } from "lucide-react";
-import { useState } from "react";
+import { ArrowLeft, Save, X, RefreshCw } from "lucide-react";
+import { useEffect, useState } from "react";
 import { FloatingInput } from "../../../utils/InputFields";
-import { masterAPI } from "../../../api/customerAPI";
+import { serviceAPI } from "../../../api/serviceAPI";
+
+const ORG_ID = Number(localStorage.getItem("orgId"));
+// Make sure your login stores the branch id under this key (or change it)
+const BRANCH_ID = Number(localStorage.getItem("branchId"));
+
+const emptyForm = {
+  serviceCode: "",
+  serviceDescription: "",
+  cancelRemarks: "",
+};
 
 const ServiceMasterForm = ({ data, onBack }) => {
-  const [orgId] = useState(localStorage.getItem("orgId"));
-
-  const [form, setForm] = useState({
-    serviceCode: data?.serviceCode || "",
-    description: data?.description || "",
-    active: data?.active === "Active" || data?.active === true,
-  });
-
+  const [form, setForm] = useState(emptyForm);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [fieldErrors, setFieldErrors] = useState({});
 
+  // On edit: fetch the record by id and fill the form
+  useEffect(() => {
+    if (!data?.id) {
+      setForm(emptyForm);
+      return;
+    }
+
+    const loadById = async () => {
+      try {
+        setIsLoading(true);
+        const s = await serviceAPI.getById(data.id);
+        if (s) {
+          setForm({
+            serviceCode: s.serviceCode || "",
+            serviceDescription: s.serviceDescription || "",
+            cancelRemarks: s.cancelRemarks || "",
+          });
+        }
+      } catch (error) {
+        console.error("Failed to load service:", error);
+        alert("Failed to load service details.");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadById();
+  }, [data?.id]);
+
   const handleChange = (e) => {
-    const { name, value, type, checked } = e.target;
-
-    setForm((prev) => ({
-      ...prev,
-      [name]: type === "checkbox" ? checked : value.toUpperCase(),
-    }));
-
+    const { name, value } = e.target;
+    setForm((prev) => ({ ...prev, [name]: value.toUpperCase() }));
     setFieldErrors((prev) => ({ ...prev, [name]: "" }));
   };
 
   const handleSave = async () => {
     const errors = {};
-
-    if (!form.serviceCode.trim()) {
+    if (!form.serviceCode.trim())
       errors.serviceCode = "Service Code is required";
-    }
-
-    if (!form.description.trim()) {
-      errors.description = "Description is required";
-    }
+    if (!form.serviceDescription.trim())
+      errors.serviceDescription = "Description is required";
 
     if (Object.keys(errors).length) {
       setFieldErrors(errors);
@@ -46,20 +70,22 @@ const ServiceMasterForm = ({ data, onBack }) => {
 
     const payload = {
       ...(data?.id && { id: data.id }),
-      orgId,
-      serviceCode: form.serviceCode.trim().toUpperCase(),
-      description: form.description.trim().toUpperCase(),
-      active: form.active,
-      cancel: false,
-      createdBy: "ITC001",
+      orgId: ORG_ID,
+      branch: BRANCH_ID,
+      serviceCode: form.serviceCode.trim(),
+      serviceDescription: form.serviceDescription.trim(),
+      cancelRemarks: form.cancelRemarks.trim(),
+      createdBy: "admin",
     };
 
     try {
-      // Replace with your actual API method if named differently.
-      await masterAPI.saveService(payload);
-
+      const response = await serviceAPI.save(payload);
+      if (response?.status === false) {
+        alert(response?.errors?.[0]?.longMessage || "Failed to save service.");
+        return;
+      }
       alert(
-        data ? "Service updated successfully!" : "Service saved successfully!",
+        response?.paramObjectsMap?.message || "Service saved successfully!",
       );
       onBack();
     } catch (error) {
@@ -79,46 +105,43 @@ const ServiceMasterForm = ({ data, onBack }) => {
         >
           <ArrowLeft className="h-4 w-4" />
         </button>
-
         <h2 className="text-base font-semibold text-gray-900 dark:text-white">
           {data ? "Edit Service" : "Add Service"}
         </h2>
       </div>
 
       <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
-          <FloatingInput
-            label="Service Code *"
-            name="serviceCode"
-            value={form.serviceCode}
-            onChange={handleChange}
-            error={fieldErrors.serviceCode}
-            required
-          />
-
-          <FloatingInput
-            label="Description *"
-            name="description"
-            value={form.description}
-            onChange={handleChange}
-            error={fieldErrors.description}
-            required
-          />
-
-          <div className="flex items-center gap-2 p-1">
-            <input
-              type="checkbox"
-              name="active"
-              checked={form.active}
-              onChange={handleChange}
-              className="h-3.5 w-3.5 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
-            />
-
-            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-              Active
-            </span>
+        {isLoading ? (
+          <div className="text-center py-8">
+            <RefreshCw className="h-5 w-5 animate-spin mx-auto text-gray-500" />
+            <p className="text-xs text-gray-500 mt-2">Loading service...</p>
           </div>
-        </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
+            <FloatingInput
+              label="Service Code *"
+              name="serviceCode"
+              value={form.serviceCode}
+              onChange={handleChange}
+              error={fieldErrors.serviceCode}
+              required
+            />
+            <FloatingInput
+              label="Description *"
+              name="serviceDescription"
+              value={form.serviceDescription}
+              onChange={handleChange}
+              error={fieldErrors.serviceDescription}
+              required
+            />
+            <FloatingInput
+              label="Cancel Remarks"
+              name="cancelRemarks"
+              value={form.cancelRemarks}
+              onChange={handleChange}
+            />
+          </div>
+        )}
 
         <div className="flex justify-end gap-2 mt-5 pt-3 border-t border-gray-200 dark:border-gray-700">
           <button
@@ -126,13 +149,11 @@ const ServiceMasterForm = ({ data, onBack }) => {
             disabled={isSubmitting}
             className="flex items-center gap-1 px-3 py-1.5 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded text-xs hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50"
           >
-            <X className="h-3.5 w-3.5" />
-            Cancel
+            <X className="h-3.5 w-3.5" /> Cancel
           </button>
-
           <button
             onClick={handleSave}
-            disabled={isSubmitting}
+            disabled={isSubmitting || isLoading}
             className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs disabled:opacity-50"
           >
             <Save className="h-3.5 w-3.5" />

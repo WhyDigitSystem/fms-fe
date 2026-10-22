@@ -19,6 +19,7 @@ const ProductMaster = () => {
 
   const backToList = () => {
     setScreen("list");
+    setEditData(null);
     setRefreshTrigger((prev) => prev + 1);
   };
 
@@ -32,7 +33,6 @@ const ProductMaster = () => {
           refreshTrigger={refreshTrigger}
         />
       )}
-
       {screen === "form" && (
         <ProductMasterForm data={editData} onBack={backToList} />
       )}

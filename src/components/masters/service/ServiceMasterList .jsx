@@ -9,9 +9,13 @@ import {
   ChevronRight,
 } from "lucide-react";
 import * as XLSX from "xlsx";
-import { masterAPI } from "../../../api/customerAPI";
+import { serviceAPI } from "../../../api/serviceAPI";
 
 const ORG_ID = Number(localStorage.getItem("orgId"));
+const BRANCH_ID = Number(localStorage.getItem("branchId"));
+
+const isActive = (item) =>
+  item.active === true || item.active === "Active" || item.active === 1;
 
 export default function ServiceMasterList({ onAdd, onEdit, refreshTrigger }) {
   const [services, setServices] = useState([]);
@@ -24,23 +28,11 @@ export default function ServiceMasterList({ onAdd, onEdit, refreshTrigger }) {
 
   const loadServices = async (showRefresh = false) => {
     try {
-      if (showRefresh) {
-        setRefreshing(true);
-      } else {
-        setLoading(true);
-      }
+      if (showRefresh) setRefreshing(true);
+      else setLoading(true);
 
-      // Ensure this method exists in customerAPI.js.
-      const response = await masterAPI.getServices(ORG_ID);
-
-      const data = Array.isArray(response)
-        ? response
-        : Array.isArray(response?.data)
-          ? response.data
-          : Array.isArray(response?.data?.data)
-            ? response.data.data
-            : [];
-
+      const response = await serviceAPI.getAll(ORG_ID, BRANCH_ID);
+      const data = Array.isArray(response) ? response : [];
       setServices(
         [...data].sort((a, b) => Number(b.id || 0) - Number(a.id || 0)),
       );
@@ -58,15 +50,14 @@ export default function ServiceMasterList({ onAdd, onEdit, refreshTrigger }) {
   }, [refreshTrigger]);
 
   const filteredServices = services.filter((item) => {
-    const query = search.toLowerCase();
-
+    const q = search.toLowerCase();
     return (
       String(item.serviceCode || "")
         .toLowerCase()
-        .includes(query) ||
-      String(item.description || "")
+        .includes(q) ||
+      String(item.serviceDescription || "")
         .toLowerCase()
-        .includes(query)
+        .includes(q)
     );
   });
 
@@ -74,9 +65,7 @@ export default function ServiceMasterList({ onAdd, onEdit, refreshTrigger }) {
     1,
     Math.ceil(filteredServices.length / itemsPerPage),
   );
-
   const safePage = Math.min(currentPage, totalPages);
-
   const paginatedServices = filteredServices.slice(
     (safePage - 1) * itemsPerPage,
     safePage * itemsPerPage,
@@ -86,22 +75,14 @@ export default function ServiceMasterList({ onAdd, onEdit, refreshTrigger }) {
     const rows = filteredServices.map((item, index) => ({
       "S.No": index + 1,
       "Service Code": item.serviceCode || "",
-      Description: item.description || "",
-      Status:
-        item.active === true || item.active === "Active" || item.active === 1
-          ? "Active"
-          : "Inactive",
+      Description: item.serviceDescription || "",
+      Status: isActive(item) ? "Active" : "Inactive",
     }));
-
     const worksheet = XLSX.utils.json_to_sheet(rows);
     const workbook = XLSX.utils.book_new();
-
     XLSX.utils.book_append_sheet(workbook, worksheet, "Services");
     XLSX.writeFile(workbook, "ServiceMaster.xlsx");
   };
-
-  const isActive = (item) =>
-    item.active === true || item.active === "Active" || item.active === 1;
 
   return (
     <div className="mx-auto max-w-6xl rounded-lg bg-gray-50 p-4 dark:bg-gray-900">
@@ -125,23 +106,19 @@ export default function ServiceMasterList({ onAdd, onEdit, refreshTrigger }) {
             <RefreshCw size={14} className={refreshing ? "animate-spin" : ""} />
             Refresh
           </button>
-
           <button
             type="button"
             onClick={exportToExcel}
             className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 px-2.5 py-2 text-xs font-medium text-gray-700 hover:bg-gray-100 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
           >
-            <Download size={14} />
-            Export
+            <Download size={14} /> Export
           </button>
-
           <button
             type="button"
             onClick={onAdd}
             className="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-3 py-2 text-xs font-medium text-white hover:bg-blue-700"
           >
-            <Plus size={15} />
-            Add Service
+            <Plus size={15} /> Add Service
           </button>
         </div>
       </div>
@@ -208,15 +185,12 @@ export default function ServiceMasterList({ onAdd, onEdit, refreshTrigger }) {
                   <td className="whitespace-nowrap px-3 py-2.5 text-gray-600 dark:text-gray-300">
                     {(safePage - 1) * itemsPerPage + index + 1}
                   </td>
-
                   <td className="whitespace-nowrap px-3 py-2.5 font-medium text-gray-800 dark:text-gray-100">
                     {item.serviceCode || "-"}
                   </td>
-
                   <td className="px-3 py-2.5 text-gray-600 dark:text-gray-300">
-                    {item.description || "-"}
+                    {item.serviceDescription || "-"}
                   </td>
-
                   <td className="whitespace-nowrap px-3 py-2.5">
                     <span
                       className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium ${
@@ -228,7 +202,6 @@ export default function ServiceMasterList({ onAdd, onEdit, refreshTrigger }) {
                       {isActive(item) ? "Active" : "Inactive"}
                     </span>
                   </td>
-
                   <td className="px-3 py-2 text-center">
                     <button
                       type="button"
@@ -259,23 +232,19 @@ export default function ServiceMasterList({ onAdd, onEdit, refreshTrigger }) {
         <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+            onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
             disabled={safePage === 1}
             className="rounded border border-gray-300 p-1.5 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-700 dark:hover:bg-gray-800"
             aria-label="Previous page"
           >
             <ChevronLeft size={14} />
           </button>
-
           <span>
             Page {safePage} of {totalPages}
           </span>
-
           <button
             type="button"
-            onClick={() =>
-              setCurrentPage((page) => Math.min(totalPages, page + 1))
-            }
+            onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
             disabled={safePage === totalPages}
             className="rounded border border-gray-300 p-1.5 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-700 dark:hover:bg-gray-800"
             aria-label="Next page"
