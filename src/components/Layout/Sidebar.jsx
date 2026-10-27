@@ -38,7 +38,7 @@ const Sidebar = () => {
       screenCode: "MASTER",
     },
     {
-      name: "Sales",
+      name: "Pre Sales",
       href: "/sales",
       icon: ShoppingCart,
       color: "orange",

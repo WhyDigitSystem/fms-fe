@@ -1,21 +1,16 @@
 import React from "react";
 import {
-  AlertTriangle,
   Boxes,
   Building2,
   CalendarCheck,
   Coins,
   FileText,
-  Flag,
   GitBranch,
   GitMerge,
   Globe,
-  Grid3x3,
   IdCard,
   Landmark,
-  Layers,
   Map,
-  MapPin,
   Monitor,
   Shield,
   PlusCircle,
@@ -37,7 +32,7 @@ import {
 import { useNavigate } from "react-router-dom";
 import { hasScreenAccess } from "../../utils/accessControl";
 
-// Master menu items
+// All master menu items
 const MASTERS = [
   {
     name: "Country",
@@ -175,12 +170,24 @@ const MASTERS = [
   },
   {
     name: "Currency",
-    icon: Wrench,
+    icon: Coins,
     path: "/currency",
     color: "teal",
     screenCode: "CUR",
   },
 ];
+
+// Business Master contains only these items
+const BUSINESS_MASTER_NAMES = ["Product", "Service", "Port", "Mode"];
+
+// Split the master items into two sections
+const BASIC_MASTER = MASTERS.filter(
+  (item) => !BUSINESS_MASTER_NAMES.includes(item.name),
+);
+
+const BUSINESS_MASTER = MASTERS.filter((item) =>
+  BUSINESS_MASTER_NAMES.includes(item.name),
+);
 
 // Static Tailwind classes ensure production builds include all styles.
 const getColorStyles = (color) => {
@@ -293,99 +300,133 @@ const Master = () => {
   const navigate = useNavigate();
   const userType = localStorage.getItem("userType")?.toUpperCase();
 
-  // Preserve existing access-control rules.
-  const filteredMasters = MASTERS.filter((item) => {
-    if (userType === "SADMIN") {
-      return item.sadminOnly === true;
-    }
+  // Preserve existing access-control rules
+  const filterByAccess = (items) =>
+    items.filter((item) => {
+      if (userType === "SADMIN") {
+        return item.sadminOnly === true;
+      }
 
-    if (item.sadminOnly) {
-      return false;
-    }
+      if (item.sadminOnly) {
+        return false;
+      }
 
-    return hasScreenAccess(item.screenCode);
-  });
+      return hasScreenAccess(item.screenCode);
+    });
+
+  const filteredBasicMasters = filterByAccess(BASIC_MASTER);
+  const filteredBusinessMasters = filterByAccess(BUSINESS_MASTER);
+
+  // Reusable master section
+  const renderMasterSection = (title, items, SectionIcon) => (
+    <section className="mb-6" key={title}>
+      {/* Section Header */}
+      <div className="flex items-center gap-2 mb-4">
+        <div className="p-1.5 rounded-lg bg-gradient-to-br from-emerald-500 to-green-600 shadow-sm">
+          <SectionIcon className="h-4 w-4 text-white" />
+        </div>
+
+        <h2 className="text-base font-semibold text-gray-900 dark:text-white">
+          {title}
+        </h2>
+
+        <span className="text-xs text-gray-500 dark:text-gray-400">
+          ({items.length})
+        </span>
+
+        <div className="flex-1 h-px bg-gradient-to-r from-gray-200 to-transparent dark:from-gray-700" />
+      </div>
+
+      {/* Master Cards */}
+      {items.length > 0 ? (
+        <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-7 lg:grid-cols-9 xl:grid-cols-10 2xl:grid-cols-12 gap-3">
+          {items.map((item, index) => {
+            const Icon = item.icon;
+            const colors = getColorStyles(item.color);
+
+            return (
+              <div
+                key={item.name}
+                role="button"
+                tabIndex={0}
+                aria-label={`Open ${item.name}`}
+                onClick={() => navigate(item.path)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    navigate(item.path);
+                  }
+                }}
+                className="group cursor-pointer animate-slideUp"
+                style={{
+                  animationDelay: `${index * 30}ms`,
+                }}
+              >
+                <div
+                  className={`
+                    relative overflow-hidden
+                    bg-white dark:bg-gray-800
+                    rounded-lg border border-gray-200 dark:border-gray-700
+                    ${colors.border} ${colors.hover}
+                    transition-all duration-200
+                    hover:shadow-md hover:scale-[1.02]
+                    focus-visible:outline-none
+                    focus-visible:ring-2 focus-visible:ring-emerald-500
+                  `}
+                >
+                  <div className="p-1 h-20 flex flex-col items-center justify-center text-center">
+                    {/* Icon */}
+                    <div
+                      className={`
+                        p-2 rounded-lg ${colors.iconBg}
+                        transition-all duration-200
+                        group-hover:scale-105 mb-1.5
+                      `}
+                    >
+                      <Icon className={`h-4 w-4 ${colors.text}`} />
+                    </div>
+
+                    {/* Master Name */}
+                    <h3
+                      className={`
+                        text-xs font-medium ${colors.text}
+                        transition-colors leading-tight line-clamp-2
+                      `}
+                    >
+                      {item.name}
+                    </h3>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="rounded-lg border border-dashed border-gray-200 dark:border-gray-700 p-4 text-center">
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            No {title.toLowerCase()} items available.
+          </p>
+        </div>
+      )}
+    </section>
+  );
+
+  const hasAnyMasters =
+    filteredBasicMasters.length > 0 || filteredBusinessMasters.length > 0;
 
   return (
     <div className="animate-fadeIn px-3 py-3">
-      {filteredMasters.length > 0 ? (
+      {hasAnyMasters ? (
         <>
-          {/* Main Header */}
-          <div className="flex items-center gap-2 mb-4">
-            <div className="p-1.5 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 shadow-sm">
-              <Boxes className="h-4 w-4 text-white" />
-            </div>
+          {/* First Section: Basic Master */}
+          {renderMasterSection("Basic Master", filteredBasicMasters, Boxes)}
 
-            <h2 className="text-base font-semibold text-gray-900 dark:text-white">
-              Master Data
-            </h2>
-
-            <span className="text-xs text-gray-500 dark:text-gray-400 ml-2">
-              Manage master records and application settings
-            </span>
-
-            <div className="flex-1 h-px bg-gradient-to-r from-gray-200 to-transparent dark:from-gray-700" />
-          </div>
-
-          {/* Compact Master Cards */}
-          <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-7 lg:grid-cols-9 xl:grid-cols-10 2xl:grid-cols-12 gap-3">
-            {filteredMasters.map((item, index) => {
-              const Icon = item.icon;
-              const colors = getColorStyles(item.color);
-
-              return (
-                <div
-                  key={item.name}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => navigate(item.path)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " ") {
-                      event.preventDefault();
-                      navigate(item.path);
-                    }
-                  }}
-                  className="group cursor-pointer animate-slideUp"
-                  style={{
-                    animationDelay: `${index * 30}ms`,
-                  }}
-                >
-                  <div
-                    className={`
-                      relative overflow-hidden bg-white dark:bg-gray-800
-                      rounded-lg border border-gray-200 dark:border-gray-700
-                      ${colors.border} ${colors.hover}
-                      transition-all duration-200
-                      hover:shadow-md hover:scale-[1.02]
-                    `}
-                  >
-                    <div className="p-1 h-20 flex flex-col items-center justify-center text-center">
-                      {/* Icon: same size and style as PurchaseList */}
-                      <div
-                        className={`
-                          p-2 rounded-lg ${colors.iconBg}
-                          transition-all duration-200
-                          group-hover:scale-105 mb-1.5
-                        `}
-                      >
-                        <Icon className={`h-4 w-4 ${colors.text}`} />
-                      </div>
-
-                      {/* Master Name */}
-                      <h3
-                        className={`
-                          text-xs font-medium ${colors.text}
-                          transition-colors leading-tight line-clamp-2
-                        `}
-                      >
-                        {item.name}
-                      </h3>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+          {/* Second Section: Business Master */}
+          {renderMasterSection(
+            "Business Master",
+            filteredBusinessMasters,
+            BriefcaseBusiness,
+          )}
         </>
       ) : (
         <div className="flex items-center justify-center h-[50vh]">
@@ -446,7 +487,7 @@ const styles = `
 }
 `;
 
-// Add animation styles once.
+// Add animation styles once
 if (
   typeof document !== "undefined" &&
   !document.getElementById("master-page-animations")
