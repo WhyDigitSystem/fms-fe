@@ -3,14 +3,62 @@ import axios from "axios";
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8085";
 
 export const docTypeAPI = {
-  // Get all document types
+  // ============================================================
+  // ✅ NEW: Document Type Master endpoints
+  // ============================================================
+
+  // Get all document type masters by org id
+  getAllDocumentTypeMaster: async (orgId) => {
+    try {
+      const response = await axios.get(
+        `${API_URL}/api/commonmaster/getAllDocumentTypeMasterByOrgId`,
+        { params: { orgId } }
+      );
+      return response.data;
+    } catch (error) {
+      console.error("Error fetching document type masters:", error);
+      throw error;
+    }
+  },
+
+  // Get a single document type master by id
+  getDocumentTypeMasterById: async (id) => {
+    try {
+      const response = await axios.get(
+        `${API_URL}/api/commonmaster/getDocumentTypeMasterById`,
+        { params: { id } }
+      );
+      return response.data;
+    } catch (error) {
+      console.error("Error fetching document type master by id:", error);
+      throw error;
+    }
+  },
+
+  // Create or update via commonmaster controller
+  saveDocumentTypeMaster: async (payload) => {
+    try {
+      const response = await axios.put(
+        `${API_URL}/api/commonmaster/createUpdateDocumentTypeMaster`,
+        payload
+      );
+      return response.data;
+    } catch (error) {
+      console.error("Error saving document type master:", error);
+      throw error;
+    }
+  },
+
+  // ============================================================
+  // Legacy / shared endpoints
+  // ============================================================
+
+  // Get all document types (legacy)
   getAllDocumentTypes: async (orgId) => {
     try {
       const response = await axios.get(
         `${API_URL}/api/warehousemastercontroller/getAllDocumentType`,
-        {
-          params: { orgid: orgId },
-        }
+        { params: { orgid: orgId } }
       );
       return response.data;
     } catch (error) {
@@ -37,9 +85,7 @@ export const docTypeAPI = {
     try {
       const response = await axios.get(
         `${API_URL}/api/warehousemastercontroller/getClientAndClientCodeByOrgId`,
-        {
-          params: { orgId },
-        }
+        { params: { orgId } }
       );
       return response.data;
     } catch (error) {
@@ -48,7 +94,7 @@ export const docTypeAPI = {
     }
   },
 
-  // Create or update document type
+  // Create or update (legacy endpoint)
   saveDocumentType: async (payload) => {
     try {
       const response = await axios.put(
@@ -81,11 +127,7 @@ export const docTypeAPI = {
       const response = await axios.post(
         `${API_URL}/api/warehousemastercontroller/DocTypeUpload`,
         formData,
-        {
-          headers: {
-            "Content-Type": "multipart/form-data",
-          },
-        }
+        { headers: { "Content-Type": "multipart/form-data" } }
       );
       return response.data;
     } catch (error) {

@@ -119,7 +119,7 @@ const DepartmentListView = ({ onAddNew, onEdit }) => {
                                         >
                                             <td className="p-2">{i + 1}</td>
                                             <td className="p-2 font-medium">{dept.code || "-"}</td>
-                                            <td className="p-2">{dept.departmentName || "-"}</td>
+                                            <td className="p-2">{dept.department || "-"}</td>
                                             <td className="p-2">
                                                 <span
                                                     className={`px-2 py-0.5 rounded-md text-xs font-medium 

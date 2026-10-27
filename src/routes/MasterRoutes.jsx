@@ -16,6 +16,7 @@ import CreateCompanyPage from "../components/masters/createCompany/companyMaster
 import BranchMaster from "../components/masters/branch/BranchMaster";
 import RolesAndResponsibilitySetup from "../components/masters/rolesResponsibilities/RolesAndResponsibilitySetup";
 import DepartmentMasterPage from "../components/masters/Department/DepartmentMaster";
+import CurrencyMaster from "../components/masters/Currency/CurrencyMaster";
 import DesignationMasterPage from "../components/masters/Designation/DesignationMaster";
 import ServiceMaster from "../components/masters/service/ServiceMaster";
 import ProductMaster from "../components/masters/product/ProductMaster";
@@ -102,6 +103,10 @@ const masterRoutes = [
   {
     path: "mode",
     element: <ModeMaster />,
+  },
+  {
+    path: "currency",
+    element: <CurrencyMaster />,
   },
 ];
 

@@ -376,7 +376,7 @@ const GlobalSelectionDropdown = () => {
 
   const formatFinancialYear = (finYear) => {
     if (finYear == null) return "";
-    return `${finYear}-${parseInt(finYear, 10) + 1}`;
+    return `${finYear}`;
   };
 
   const getCustomerName = (c) =>
@@ -463,7 +463,7 @@ const GlobalSelectionDropdown = () => {
                     }
                   >
                     {formatFinancialYear(year.finYear)}
-                    {year.currentFinYear ? " (Current)" : ""}
+                    {year.currentFinYear ? "" : ""}
                   </option>
                 ))}
               </select>

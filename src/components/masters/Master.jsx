@@ -173,6 +173,13 @@ const MASTERS = [
     color: "orange",
     screenCode: "MODE",
   },
+  {
+    name: "Currency",
+    icon: Wrench,
+    path: "/currency",
+    color: "teal",
+    screenCode: "CUR",
+  },
 ];
 
 // Static Tailwind classes ensure production builds include all styles.

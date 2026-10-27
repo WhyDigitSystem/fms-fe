@@ -17,11 +17,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
-const modeIcons = {
-  Sea: Ship,
-  Air: Plane,
-  Road: Truck,
-};
+const modeIcons = { Sea: Ship, Air: Plane, Road: Truck };
 
 const statusStyles = {
   Open: "bg-amber-50 text-amber-700 ring-amber-600/20 dark:bg-amber-500/10 dark:text-amber-300 dark:ring-amber-400/20",
@@ -53,6 +49,55 @@ const headings = [
   { label: "Action", className: "text-center" },
 ];
 
+// -------------------------------------------------------------
+// ✅ Map API row → UI row
+// -------------------------------------------------------------
+const titleCase = (v) =>
+  String(v || "")
+    .toLowerCase()
+    .replace(/(^|\s)\S/g, (s) => s.toUpperCase());
+
+// Pick the right location field based on shipment mode
+const pickOriginLocation = (r) => {
+  const mode = String(r?.shipmentMode || "").toUpperCase();
+  if (mode === "SEA") return r?.originPort || "";
+  if (mode === "AIR") return r?.originAirport || "";
+  if (mode === "ROAD") return r?.originTerminal || "";
+  return r?.originPort || r?.originAirport || r?.originTerminal || "";
+};
+
+const pickDestinationLocation = (r) => {
+  const mode = String(r?.shipmentMode || "").toUpperCase();
+  if (mode === "SEA") return r?.destinationPort || "";
+  if (mode === "AIR") return r?.destinationAirport || "";
+  if (mode === "ROAD") return r?.destinationTerminal || "";
+  return (
+    r?.destinationPort ||
+    r?.destinationAirport ||
+    r?.destinationTerminal ||
+    ""
+  );
+};
+
+const toRow = (item) => ({
+  // keep the original payload so edit can pass it straight through
+  ...item,
+
+  id: item?.id,
+  enquiryNo: item?.docId || "",
+  enquiryDate: item?.docDate || "",
+  customer: item?.customer || "",
+  movement: item?.movement ? titleCase(item.movement) : "",
+  mode: item?.shipmentMode ? titleCase(item.shipmentMode) : "",
+  origin: item?.fromLocation || "",
+  destination: item?.toLocation || "",
+  pol: pickOriginLocation(item),
+  pod: pickDestinationLocation(item),
+  cargo: item?.cargoDescription || "",
+  cargoType: item?.cargoType || "",
+  status: item?.status || "Open", // API doesn't send status yet → default Open
+});
+
 const SelectBox = ({ value, onChange, options, label, className = "" }) => (
   <div className={`relative ${className}`}>
     <select
@@ -75,17 +120,28 @@ const SelectBox = ({ value, onChange, options, label, className = "" }) => (
   </div>
 );
 
-const EnquiryList = ({ enquiries = [], onAddNew, onEdit, onBack }) => {
+const EnquiryList = ({
+  enquiries = [],
+  loading = false,
+  error = null,
+  onRetry,
+  onAddNew,
+  onEdit,
+  onBack,
+}) => {
   const [search, setSearch] = useState("");
   const [modeFilter, setModeFilter] = useState("All");
   const [statusFilter, setStatusFilter] = useState("All");
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
+  // ✅ Normalise once per data change
+  const rows = useMemo(() => enquiries.map(toRow), [enquiries]);
+
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
 
-    return enquiries.filter((item) => {
+    return rows.filter((item) => {
       const matchesSearch = [
         item.enquiryNo,
         item.enquiryDate,
@@ -110,12 +166,10 @@ const EnquiryList = ({ enquiries = [], onAddNew, onEdit, onBack }) => {
         (statusFilter === "All" || item.status === statusFilter)
       );
     });
-  }, [enquiries, search, modeFilter, statusFilter]);
+  }, [rows, search, modeFilter, statusFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
-
   const startIndex = (currentPage - 1) * pageSize;
-
   const currentItems = filtered.slice(startIndex, startIndex + pageSize);
 
   useEffect(() => {
@@ -123,28 +177,26 @@ const EnquiryList = ({ enquiries = [], onAddNew, onEdit, onBack }) => {
   }, [search, modeFilter, statusFilter, pageSize]);
 
   useEffect(() => {
-    if (currentPage > totalPages) {
-      setCurrentPage(totalPages);
-    }
+    if (currentPage > totalPages) setCurrentPage(totalPages);
   }, [currentPage, totalPages]);
 
   const stats = [
     {
       label: "Total Enquiries",
-      value: enquiries.length,
+      value: rows.length,
       icon: ClipboardList,
       color: "text-blue-600 bg-blue-50 dark:bg-blue-500/10 dark:text-blue-400",
     },
     {
       label: "Open Enquiries",
-      value: enquiries.filter((item) => item.status === "Open").length,
+      value: rows.filter((item) => item.status === "Open").length,
       icon: Filter,
       color:
         "text-amber-600 bg-amber-50 dark:bg-amber-500/10 dark:text-amber-400",
     },
     {
       label: "Quoted",
-      value: enquiries.filter((item) => item.status === "Quoted").length,
+      value: rows.filter((item) => item.status === "Quoted").length,
       icon: ArrowUpRight,
       color:
         "text-emerald-600 bg-emerald-50 dark:bg-emerald-500/10 dark:text-emerald-400",
@@ -170,12 +222,10 @@ const EnquiryList = ({ enquiries = [], onAddNew, onEdit, onBack }) => {
                 <h1 className="text-base font-bold leading-tight text-slate-900 dark:text-white sm:text-lg">
                   Enquiry Management
                 </h1>
-
                 <span className="rounded-md bg-blue-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-blue-700 dark:bg-blue-500/10 dark:text-blue-300">
                   Sales
                 </span>
               </div>
-
               <p className="mt-0.5 text-[10px] text-slate-500 dark:text-gray-400">
                 Manage customer enquiries, cargo requirements and shipping
                 routes.
@@ -203,12 +253,10 @@ const EnquiryList = ({ enquiries = [], onAddNew, onEdit, onBack }) => {
                 <p className="text-[11px] font-medium text-slate-500 dark:text-gray-400">
                   {label}
                 </p>
-
                 <p className="mt-1 text-lg font-bold leading-none text-slate-900 dark:text-white">
                   {value}
                 </p>
               </div>
-
               <div
                 className={`flex h-8 w-8 items-center justify-center rounded-md ${color}`}
               >
@@ -218,13 +266,27 @@ const EnquiryList = ({ enquiries = [], onAddNew, onEdit, onBack }) => {
           ))}
         </div>
 
+        {error && (
+          <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700 dark:border-rose-900/60 dark:bg-rose-900/20 dark:text-rose-300">
+            {error}
+            {onRetry && (
+              <button
+                type="button"
+                onClick={onRetry}
+                className="ml-2 underline hover:no-underline"
+              >
+                Retry
+              </button>
+            )}
+          </div>
+        )}
+
         <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm dark:border-gray-700/60 dark:bg-gray-800/40">
           <div className="flex flex-col gap-2 border-b border-slate-100 px-3 py-2 dark:border-gray-700/60 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <h2 className="text-xs font-semibold text-slate-900 dark:text-white">
                 Enquiry Register
               </h2>
-
               <p className="mt-0.5 text-[10px] text-slate-500 dark:text-gray-400">
                 View and manage all customer enquiries.
               </p>
@@ -236,7 +298,6 @@ const EnquiryList = ({ enquiries = [], onAddNew, onEdit, onBack }) => {
                   size={14}
                   className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400"
                 />
-
                 <input
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
@@ -286,150 +347,160 @@ const EnquiryList = ({ enquiries = [], onAddNew, onEdit, onBack }) => {
               </thead>
 
               <tbody className="divide-y divide-slate-100 dark:divide-gray-700/50">
-                {currentItems.map((item) => {
-                  const ModeIcon = modeIcons[item.mode] || Ship;
-                  const status = item.status || "Open";
-
-                  return (
-                    <tr
-                      key={item.id ?? item.enquiryNo}
-                      className="transition hover:bg-slate-50/80 dark:hover:bg-gray-800/60"
-                    >
-                      <td className="whitespace-nowrap px-3 py-2 align-middle">
-                        <span className="font-semibold text-blue-700 dark:text-blue-400">
-                          {item.enquiryNo || "-"}
-                        </span>
-                      </td>
-
-                      <td className="whitespace-nowrap px-3 py-2 align-middle text-slate-600 dark:text-gray-300">
-                        {item.enquiryDate || "-"}
-                      </td>
-
-                      <td className="max-w-[180px] px-3 py-2 align-middle">
-                        <p
-                          className="truncate font-semibold text-slate-800 dark:text-gray-100"
-                          title={item.customer || ""}
+                {loading && (
+                  <tr>
+                    <td colSpan={headings.length} className="px-3 py-8">
+                      <div className="flex items-center justify-center gap-2 text-xs text-slate-500 dark:text-gray-400">
+                        <svg
+                          className="h-4 w-4 animate-spin"
+                          viewBox="0 0 24 24"
+                          fill="none"
                         >
-                          {item.customer || "-"}
-                        </p>
-                      </td>
-
-                      <td className="whitespace-nowrap px-3 py-2 align-middle">
-                        <span className="inline-flex items-center gap-1 text-slate-600 dark:text-gray-300">
-                          {item.movement === "Export" ? (
-                            <ArrowUpRight
-                              size={13}
-                              className="text-emerald-500"
-                            />
-                          ) : (
-                            <ArrowDownLeft
-                              size={13}
-                              className="text-blue-500"
-                            />
-                          )}
-
-                          {item.movement || "-"}
-                        </span>
-                      </td>
-
-                      <td className="whitespace-nowrap px-3 py-2 align-middle">
-                        <span className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-1.5 py-1 font-medium text-slate-600 dark:border-gray-700 dark:bg-gray-900/50 dark:text-gray-300">
-                          <ModeIcon size={12} />
-                          {item.mode || "-"}
-                        </span>
-                      </td>
-
-                      <td className="max-w-[190px] px-3 py-2 align-middle">
-                        <p
-                          className="truncate font-medium text-slate-700 dark:text-gray-100"
-                          title={item.origin || ""}
-                        >
-                          {item.origin || "-"}
-                        </p>
-
-                        <p
-                          className="mt-0.5 flex items-center gap-1 truncate text-[10px] text-slate-500 dark:text-gray-400"
-                          title={item.pol || ""}
-                        >
-                          <MapPin size={10} className="shrink-0" />
-
-                          <span className="truncate">
-                            {item.pol || "Location not selected"}
-                          </span>
-                        </p>
-                      </td>
-
-                      <td className="max-w-[190px] px-3 py-2 align-middle">
-                        <p
-                          className="truncate font-medium text-slate-700 dark:text-gray-100"
-                          title={item.destination || ""}
-                        >
-                          {item.destination || "-"}
-                        </p>
-
-                        <p
-                          className="mt-0.5 flex items-center gap-1 truncate text-[10px] text-slate-500 dark:text-gray-400"
-                          title={item.pod || ""}
-                        >
-                          <MapPin size={10} className="shrink-0" />
-
-                          <span className="truncate">
-                            {item.pod || "Location not selected"}
-                          </span>
-                        </p>
-                      </td>
-
-                      <td className="max-w-[160px] px-3 py-2 align-middle text-slate-600 dark:text-gray-300">
-                        <p className="truncate" title={item.cargo || ""}>
-                          {item.cargo || "-"}
-                        </p>
-                      </td>
-
-                      <td className="whitespace-nowrap px-3 py-2 align-middle">
-                        <span
-                          className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ring-inset ${
-                            statusStyles[status] || statusStyles.Open
-                          }`}
-                        >
-                          <span
-                            className={`h-1.5 w-1.5 rounded-full ${
-                              statusDots[status] || statusDots.Open
-                            }`}
+                          <circle
+                            className="opacity-25"
+                            cx="12"
+                            cy="12"
+                            r="10"
+                            stroke="currentColor"
+                            strokeWidth="4"
                           />
+                          <path
+                            className="opacity-75"
+                            fill="currentColor"
+                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                          />
+                        </svg>
+                        Loading enquiries...
+                      </div>
+                    </td>
+                  </tr>
+                )}
 
-                          {status}
-                        </span>
-                      </td>
-
-                      <td className="px-3 py-2 align-middle">
-                        <div className="flex justify-center">
-                          <button
-                            type="button"
-                            onClick={() => onEdit?.(item)}
-                            className="flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 text-slate-500 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 dark:border-gray-700 dark:text-gray-300 dark:hover:border-blue-500/40 dark:hover:bg-blue-500/10 dark:hover:text-blue-300"
-                            title="Edit enquiry"
-                            aria-label={`Edit enquiry ${item.enquiryNo || ""}`}
+                {!loading &&
+                  currentItems.map((item) => {
+                    const ModeIcon = modeIcons[item.mode] || Ship;
+                    const status = item.status || "Open";
+                    return (
+                      <tr
+                        key={item.id ?? item.enquiryNo}
+                        className="transition hover:bg-slate-50/80 dark:hover:bg-gray-800/60"
+                      >
+                        <td className="whitespace-nowrap px-3 py-2 align-middle">
+                          <span className="font-semibold text-blue-700 dark:text-blue-400">
+                            {item.enquiryNo || "-"}
+                          </span>
+                        </td>
+                        <td className="whitespace-nowrap px-3 py-2 align-middle text-slate-600 dark:text-gray-300">
+                          {item.enquiryDate || "-"}
+                        </td>
+                        <td className="max-w-[180px] px-3 py-2 align-middle">
+                          <p
+                            className="truncate font-semibold text-slate-800 dark:text-gray-100"
+                            title={item.customer || ""}
                           >
-                            <Pencil size={13} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
+                            {item.customer || "-"}
+                          </p>
+                        </td>
+                        <td className="whitespace-nowrap px-3 py-2 align-middle">
+                          <span className="inline-flex items-center gap-1 text-slate-600 dark:text-gray-300">
+                            {item.movement === "Export" ? (
+                              <ArrowUpRight
+                                size={13}
+                                className="text-emerald-500"
+                              />
+                            ) : (
+                              <ArrowDownLeft
+                                size={13}
+                                className="text-blue-500"
+                              />
+                            )}
+                            {item.movement || "-"}
+                          </span>
+                        </td>
+                        <td className="whitespace-nowrap px-3 py-2 align-middle">
+                          <span className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-1.5 py-1 font-medium text-slate-600 dark:border-gray-700 dark:bg-gray-900/50 dark:text-gray-300">
+                            <ModeIcon size={12} />
+                            {item.mode || "-"}
+                          </span>
+                        </td>
+                        <td className="max-w-[190px] px-3 py-2 align-middle">
+                          <p
+                            className="truncate font-medium text-slate-700 dark:text-gray-100"
+                            title={item.origin || ""}
+                          >
+                            {item.origin || "-"}
+                          </p>
+                          <p
+                            className="mt-0.5 flex items-center gap-1 truncate text-[10px] text-slate-500 dark:text-gray-400"
+                            title={item.pol || ""}
+                          >
+                            <MapPin size={10} className="shrink-0" />
+                            <span className="truncate">
+                              {item.pol || "Location not selected"}
+                            </span>
+                          </p>
+                        </td>
+                        <td className="max-w-[190px] px-3 py-2 align-middle">
+                          <p
+                            className="truncate font-medium text-slate-700 dark:text-gray-100"
+                            title={item.destination || ""}
+                          >
+                            {item.destination || "-"}
+                          </p>
+                          <p
+                            className="mt-0.5 flex items-center gap-1 truncate text-[10px] text-slate-500 dark:text-gray-400"
+                            title={item.pod || ""}
+                          >
+                            <MapPin size={10} className="shrink-0" />
+                            <span className="truncate">
+                              {item.pod || "Location not selected"}
+                            </span>
+                          </p>
+                        </td>
+                        <td className="max-w-[160px] px-3 py-2 align-middle text-slate-600 dark:text-gray-300">
+                          <p className="truncate" title={item.cargo || ""}>
+                            {item.cargo || "-"}
+                          </p>
+                        </td>
+                        <td className="whitespace-nowrap px-3 py-2 align-middle">
+                          <span
+                            className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ring-inset ${statusStyles[status] || statusStyles.Open
+                              }`}
+                          >
+                            <span
+                              className={`h-1.5 w-1.5 rounded-full ${statusDots[status] || statusDots.Open
+                                }`}
+                            />
+                            {status}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 align-middle">
+                          <div className="flex justify-center">
+                            <button
+                              type="button"
+                              onClick={() => onEdit?.(item)}
+                              className="flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 text-slate-500 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 dark:border-gray-700 dark:text-gray-300 dark:hover:border-blue-500/40 dark:hover:bg-blue-500/10 dark:hover:text-blue-300"
+                              title="Edit enquiry"
+                              aria-label={`Edit enquiry ${item.enquiryNo || ""}`}
+                            >
+                              <Pencil size={13} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
 
-                {currentItems.length === 0 && (
+                {!loading && currentItems.length === 0 && (
                   <tr>
                     <td colSpan={headings.length} className="px-3 py-10">
                       <div className="flex flex-col items-center text-center">
                         <span className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-400 dark:bg-gray-900 dark:text-gray-500">
                           <Search size={18} />
                         </span>
-
                         <p className="mt-2 text-xs font-medium text-slate-700 dark:text-gray-200">
                           No enquiries found
                         </p>
-
                         <p className="mt-1 text-[10px] text-slate-500 dark:text-gray-400">
                           Try changing your search or filters.
                         </p>
@@ -471,11 +542,9 @@ const EnquiryList = ({ enquiries = [], onAddNew, onEdit, onBack }) => {
               >
                 <ChevronLeft size={14} />
               </button>
-
               <span className="min-w-24 text-center text-[11px] text-slate-600 dark:text-gray-300">
                 Page {currentPage} of {totalPages}
               </span>
-
               <button
                 type="button"
                 onClick={() =>

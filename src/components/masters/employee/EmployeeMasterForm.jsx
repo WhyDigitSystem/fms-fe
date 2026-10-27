@@ -8,6 +8,33 @@ import { useToast } from "../../Toast/ToastContext";
 import CommonBulkUpload from "../../../utils/CommonBulkUpload";
 import EmployeeMasterList from "./EmployeeMasterList";
 
+// ============================================================
+// Helpers — defined at module scope so they're available
+// inside initializeForm / handleEditEmployee / render logic.
+// ============================================================
+const toId = (v) => (v && typeof v === "object" ? v.id ?? "" : v ?? "");
+
+const pickName = (v, fields = []) => {
+  if (v == null) return "";
+  if (typeof v !== "object") return String(v);
+  for (const f of fields) {
+    const val = v[f];
+    if (val != null && ["string", "number", "boolean"].includes(typeof val)) {
+      return String(val);
+    }
+  }
+  for (const [k, val] of Object.entries(v)) {
+    if (
+      val != null &&
+      ["string", "number", "boolean"].includes(typeof val) &&
+      !/(^id$|Id$|_id$)/i.test(k)
+    ) {
+      return String(val);
+    }
+  }
+  return "";
+};
+
 const EmployeeForm = ({ editData, onBack, onSaveSuccess }) => {
   const ORG_ID = parseInt(localStorage.getItem("orgId"));
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -25,14 +52,15 @@ const EmployeeForm = ({ editData, onBack, onSaveSuccess }) => {
   const [uploadOpen, setUploadOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("basic");
 
+  // IDs (not names) for branch / department / designation
   const [form, setForm] = useState({
     id: editData?.id || 0,
     employeeCode: editData?.employeeCode || "",
     employeeName: editData?.employeeName || "",
-    department: editData?.department || "",
-    designation: editData?.designation || "",
+    department: toId(editData?.department),
+    designation: toId(editData?.designation),
     gender: editData?.gender || "",
-    branch: editData?.branch || "",
+    branch: toId(editData?.branch),
     branchCode: editData?.branchCode || "",
     dateOfBirth: editData?.dateOfBirth || "",
     joiningdate: editData?.joiningdate || editData?.joiningDate || "",
@@ -41,7 +69,6 @@ const EmployeeForm = ({ editData, onBack, onSaveSuccess }) => {
 
   const [fieldErrors, setFieldErrors] = useState({});
 
-  // Field labels for toast messages
   const fieldLabels = {
     employeeCode: "Employee Code",
     employeeName: "Employee Name",
@@ -88,7 +115,6 @@ const EmployeeForm = ({ editData, onBack, onSaveSuccess }) => {
     }
   };
 
-  // ✅ Branches (direct API call)
   const fetchBranches = async () => {
     try {
       const response = await apiClient.get(
@@ -105,7 +131,6 @@ const EmployeeForm = ({ editData, onBack, onSaveSuccess }) => {
     }
   };
 
-  // ✅ Employees (guarded — API method may not exist)
   const fetchEmployees = async () => {
     try {
       if (typeof employeeAPI.getEmployees !== "function") {
@@ -126,7 +151,6 @@ const EmployeeForm = ({ editData, onBack, onSaveSuccess }) => {
     }
   };
 
-  // ✅ Departments
   const fetchDepartments = async () => {
     try {
       const response = await departmentAPI.getAllDepartments(ORG_ID);
@@ -141,7 +165,6 @@ const EmployeeForm = ({ editData, onBack, onSaveSuccess }) => {
     }
   };
 
-  // ✅ Designations
   const fetchDesignations = async () => {
     try {
       const response = await designationAPI.getAllDesignations(ORG_ID);
@@ -164,16 +187,19 @@ const EmployeeForm = ({ editData, onBack, onSaveSuccess }) => {
 
     console.log("🔄 Initializing form with editData:", editData);
 
-    const selectedBranch = branches.find((br) => br.branch === editData.branch);
+    const branchId = toId(editData.branch);
+    const selectedBranch = branches.find(
+      (br) => String(br.id) === String(branchId)
+    );
 
     setForm({
       id: editData.id || 0,
       employeeCode: editData.employeeCode || "",
       employeeName: editData.employeeName || "",
-      department: editData.department || "",
-      designation: editData.designation || "",
+      department: toId(editData.department),
+      designation: toId(editData.designation),
       gender: editData.gender || "",
-      branch: editData.branch || "",
+      branch: branchId,
       branchCode: selectedBranch
         ? selectedBranch.branchCode
         : editData.branchCode || "",
@@ -193,16 +219,6 @@ const EmployeeForm = ({ editData, onBack, onSaveSuccess }) => {
       setFieldErrors((prev) => ({ ...prev, [name]: "" }));
     }
 
-    if (name === "branch") {
-      const selectedBranch = branches.find((br) => br.branch === value);
-      setForm((prev) => ({
-        ...prev,
-        [name]: value,
-        branchCode: selectedBranch ? selectedBranch.branchCode : "",
-      }));
-      return;
-    }
-
     if (type === "checkbox") {
       setForm((prev) => ({ ...prev, [name]: checked }));
     } else {
@@ -214,6 +230,19 @@ const EmployeeForm = ({ editData, onBack, onSaveSuccess }) => {
     if (fieldErrors[name]) {
       setFieldErrors((prev) => ({ ...prev, [name]: "" }));
     }
+
+    if (name === "branch") {
+      const selectedBranch = branches.find(
+        (br) => String(br.id) === String(value)
+      );
+      setForm((prev) => ({
+        ...prev,
+        branch: value,
+        branchCode: selectedBranch ? selectedBranch.branchCode : "",
+      }));
+      return;
+    }
+
     setForm((prev) => ({ ...prev, [name]: value }));
   };
 
@@ -235,9 +264,11 @@ const EmployeeForm = ({ editData, onBack, onSaveSuccess }) => {
     if (!form.employeeName?.trim())
       errors.employeeName = "Employee Name is required";
     if (!form.gender?.trim()) errors.gender = "Gender is required";
-    if (!form.branch?.trim()) errors.branch = "Branch is required";
-    if (!form.department?.trim()) errors.department = "Department is required";
-    if (!form.designation?.trim())
+    if (form.branch === "" || form.branch == null)
+      errors.branch = "Branch is required";
+    if (form.department === "" || form.department == null)
+      errors.department = "Department is required";
+    if (form.designation === "" || form.designation == null)
       errors.designation = "Designation is required";
     if (!form.dateOfBirth) errors.dateOfBirth = "Date of Birth is required";
     if (!form.joiningdate) errors.joiningdate = "Date of Join is required";
@@ -278,14 +309,14 @@ const EmployeeForm = ({ editData, onBack, onSaveSuccess }) => {
     setIsSubmitting(true);
 
     try {
-      // ✅ Build payload — include id ONLY when editing
+      // ✅ Send numeric IDs for department / designation / branch
       const payload = {
         employeeCode: form.employeeCode,
         employeeName: form.employeeName,
-        department: form.department,
-        designation: form.designation,
+        department: Number(form.department),
+        designation: Number(form.designation),
         gender: form.gender,
-        branch: form.branch,
+        branch: Number(form.branch),
         branchCode: form.branchCode,
         dateOfBirth: form.dateOfBirth,
         joiningdate: form.joiningdate,
@@ -294,7 +325,6 @@ const EmployeeForm = ({ editData, onBack, onSaveSuccess }) => {
         createdBy: loginUserName,
       };
 
-      // Only include id when it's an update (editData exists AND form.id is truthy)
       if (editData && form.id) {
         payload.id = form.id;
       }
@@ -350,15 +380,18 @@ const EmployeeForm = ({ editData, onBack, onSaveSuccess }) => {
   };
 
   const handleEditEmployee = (employee) => {
-    const selectedBranch = branches.find((br) => br.branch === employee.branch);
+    const branchId = toId(employee.branch);
+    const selectedBranch = branches.find(
+      (br) => String(br.id) === String(branchId)
+    );
     setForm({
       id: employee.id || 0,
       employeeCode: employee.employeeCode || "",
       employeeName: employee.employeeName || "",
-      department: employee.department || "",
-      designation: employee.designation || "",
+      department: toId(employee.department),
+      designation: toId(employee.designation),
       gender: employee.gender || "",
-      branch: employee.branch || "",
+      branch: branchId,
       branchCode: selectedBranch
         ? selectedBranch.branchCode
         : employee.branchCode || "",
@@ -537,7 +570,7 @@ const EmployeeForm = ({ editData, onBack, onSaveSuccess }) => {
                 )}
               </div>
 
-              {/* Department (from API) */}
+              {/* Department — value is ID */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Department <span className="text-red-500">*</span>
@@ -555,8 +588,8 @@ const EmployeeForm = ({ editData, onBack, onSaveSuccess }) => {
                 >
                   <option value="">Select Department</option>
                   {departments.map((dept) => (
-                    <option key={dept.id} value={dept.departmentName}>
-                      {dept.departmentName}
+                    <option key={dept.id} value={dept.id}>
+                      {dept.department}
                     </option>
                   ))}
                 </select>
@@ -567,7 +600,7 @@ const EmployeeForm = ({ editData, onBack, onSaveSuccess }) => {
                 )}
               </div>
 
-              {/* Designation (from API) */}
+              {/* Designation — value is ID */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Designation <span className="text-red-500">*</span>
@@ -585,7 +618,7 @@ const EmployeeForm = ({ editData, onBack, onSaveSuccess }) => {
                 >
                   <option value="">Select Designation</option>
                   {designations.map((desig) => (
-                    <option key={desig.id} value={desig.designation}>
+                    <option key={desig.id} value={desig.id}>
                       {desig.designation}
                     </option>
                   ))}
@@ -623,7 +656,7 @@ const EmployeeForm = ({ editData, onBack, onSaveSuccess }) => {
                 )}
               </div>
 
-              {/* Branch (from API) */}
+              {/* Branch — value is ID */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Branch <span className="text-red-500">*</span>
@@ -639,10 +672,7 @@ const EmployeeForm = ({ editData, onBack, onSaveSuccess }) => {
                 >
                   <option value="">Select Branch</option>
                   {branches.map((branch) => (
-                    <option
-                      key={branch.id || branch.branch}
-                      value={branch.branch}
-                    >
+                    <option key={branch.id} value={branch.id}>
                       {branch.branch}
                     </option>
                   ))}
@@ -700,7 +730,6 @@ const EmployeeForm = ({ editData, onBack, onSaveSuccess }) => {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              {/* Active */}
               <div className="flex items-center gap-2 p-2 border border-gray-200 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700">
                 <input
                   type="checkbox"

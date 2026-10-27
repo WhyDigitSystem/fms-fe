@@ -3,14 +3,16 @@ import axios from "axios";
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8085";
 
 export const documentMappingAPI = {
-  // Get all document type mappings
-  getAllDocumentTypeMappings: async (orgId) => {
+  // ============================================================
+  // ✅ NEW: Document Type Mapping Master endpoints
+  // ============================================================
+
+  // Get all document type mappings by branch + org
+  getDocumentTypeMappingByOrgId: async (branchId, orgId) => {
     try {
       const response = await axios.get(
-        `${API_URL}/api/warehousemastercontroller/getAllDocumentTypeMapping`,
-        {
-          params: { orgId },
-        }
+        `${API_URL}/api/commonmaster/getDocumentTypeMappingByOrgId`,
+        { params: { branch: branchId, orgId } }
       );
       return response.data;
     } catch (error) {
@@ -19,14 +21,56 @@ export const documentMappingAPI = {
     }
   },
 
-  // Get all branches
+  // Get single mapping by id
+  getDocumentTypeMappingById: async (id) => {
+    try {
+      const response = await axios.get(
+        `${API_URL}/api/commonmaster/getDocumentTypeMappingById`,
+        { params: { id } }
+      );
+      return response.data;
+    } catch (error) {
+      console.error("Error fetching document type mapping by id:", error);
+      throw error;
+    }
+  },
+
+  // Create or update via commonmaster controller
+  saveDocumentTypeMappingMaster: async (payload) => {
+    try {
+      const response = await axios.put(
+        `${API_URL}/api/commonmaster/updateCreateDocumentTypeMapping`,
+        payload
+      );
+      return response.data;
+    } catch (error) {
+      console.error("Error saving document type mapping (master):", error);
+      throw error;
+    }
+  },
+
+  // ============================================================
+  // Legacy / shared endpoints
+  // ============================================================
+
+  getAllDocumentTypeMappings: async (orgId) => {
+    try {
+      const response = await axios.get(
+        `${API_URL}/api/warehousemastercontroller/getAllDocumentTypeMapping`,
+        { params: { orgId } }
+      );
+      return response.data;
+    } catch (error) {
+      console.error("Error fetching document type mappings:", error);
+      throw error;
+    }
+  },
+
   getAllBranches: async (orgId) => {
     try {
       const response = await axios.get(
         `${API_URL}/api/warehousemastercontroller/branch`,
-        {
-          params: { orgid: orgId },
-        }
+        { params: { orgid: orgId } }
       );
       return response.data;
     } catch (error) {
@@ -35,14 +79,11 @@ export const documentMappingAPI = {
     }
   },
 
-  // Get all financial years
   getAllFinYears: async (orgId) => {
     try {
       const response = await axios.get(
         `${API_URL}/api/commonmaster/getAllAciveFInYear`,
-        {
-          params: { orgId },
-        }
+        { params: { orgId } }
       );
       return response.data;
     } catch (error) {
@@ -51,14 +92,11 @@ export const documentMappingAPI = {
     }
   },
 
-  // Get pending document type mappings
   getPendingMappings: async (params) => {
     try {
       const response = await axios.get(
-        `${API_URL}/api/warehousemastercontroller/getPendingDocumentTypeMapping`,
-        {
-          params,
-        }
+        `${API_URL}/api/commonmaster/getPendingDocumentTypeMapping`,
+        { params }
       );
       return response.data;
     } catch (error) {
@@ -67,7 +105,6 @@ export const documentMappingAPI = {
     }
   },
 
-  // Create or update document type mapping
   saveDocumentTypeMapping: async (payload) => {
     try {
       const response = await axios.put(
@@ -81,7 +118,6 @@ export const documentMappingAPI = {
     }
   },
 
-  // Delete document type mapping
   deleteDocumentTypeMapping: async (id) => {
     try {
       const response = await axios.delete(
@@ -94,17 +130,12 @@ export const documentMappingAPI = {
     }
   },
 
-  // Bulk upload document type mappings
   bulkUploadDocumentTypeMappings: async (formData) => {
     try {
       const response = await axios.post(
         `${API_URL}/api/warehousemastercontroller/DocTypeMappingUpload`,
         formData,
-        {
-          headers: {
-            "Content-Type": "multipart/form-data",
-          },
-        }
+        { headers: { "Content-Type": "multipart/form-data" } }
       );
       return response.data;
     } catch (error) {

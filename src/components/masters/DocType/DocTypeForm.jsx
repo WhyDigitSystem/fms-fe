@@ -1,25 +1,7 @@
-import React, { useState, useEffect, useRef } from "react";
-import {
-  Save,
-  X,
-  Plus,
-  Trash2,
-  Building2,
-  Users,
-  FileText,
-  ChevronDown,
-} from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { Save, X, Building2, FileText, ChevronDown } from "lucide-react";
 import { docTypeAPI } from "../../../api/doctypeAPI";
 import { useToast } from "../../Toast/ToastContext";
-
-// Normalizes "active" coming from the API, which may arrive as a boolean,
-// a "Active"/"Inactive" string, or 1/0.
-const normalizeActive = (value) => {
-  if (typeof value === "boolean") return value;
-  if (typeof value === "number") return value === 1;
-  if (typeof value === "string") return value.toLowerCase() === "active";
-  return true; // default for "new" records
-};
 
 const emptyForm = (ORG_ID, loginUserName) => ({
   id: 0,
@@ -32,28 +14,57 @@ const emptyForm = (ORG_ID, loginUserName) => ({
   createdBy: loginUserName,
 });
 
-const DocTypeManager = () => {
-  const ORG_ID = parseInt(localStorage.getItem("orgId")) || 1000000001;
+// Normalise "active" from any of the shapes the APIs return:
+// true / 1 / "Active"  → active
+// false / 0 / "In-Active" / "Inactive" → inactive
+const isActiveValue = (v) =>
+  v === true || v === 1 || v === "Active" || v === "ACTIVE";
+
+// Build form state from a record returned by either
+// documentTypeMasterList, documentTypeMasterVO, or legacy list
+const formFromRecord = (record, ORG_ID, loginUserName) => ({
+  id: record?.id ?? 0,
+  screenCode: record?.screenCode ?? "",
+  screenName: record?.screenName ?? "",
+  docCode: record?.docCode ?? "",
+  desc: record?.description ?? record?.desc ?? "",
+  active: isActiveValue(record?.active),
+  orgId: record?.orgId ?? ORG_ID,
+  createdBy: record?.createdBy ?? loginUserName,
+});
+
+const DocTypeForm = ({
+  onBack,
+  onSaveSuccess,
+  editData,          // row from the list (may be partial)
+  editId,            // optional explicit id
+  orgId: ORG_ID_PROP,
+}) => {
+  const ORG_ID =
+    ORG_ID_PROP != null
+      ? parseInt(ORG_ID_PROP)
+      : parseInt(localStorage.getItem("orgId")) || 1000000001;
+
   const loginUserName = localStorage.getItem("userName") || "SYSTEM";
   const { addToast } = useToast();
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loadingRecord, setLoadingRecord] = useState(false);
 
-  // Data states
   const [screenList, setScreenList] = useState([]);
-  const [clientList, setClientList] = useState([]);
   const [docTypeList, setDocTypeList] = useState([]);
 
-  const nextRowId = useRef(1);
+  // Resolve the id we should fetch (editId wins, then editData.id)
+  const resolvedEditId =
+    editId ?? (editData?.id != null ? editData.id : null);
 
-  const [form, setForm] = useState(emptyForm(ORG_ID, loginUserName));
-  const [clientTableData, setClientTableData] = useState([
-    { id: nextRowId.current++, clientCode: "", client: "" },
-  ]);
-
+  const [form, setForm] = useState(() =>
+    editData && !resolvedEditId
+      ? formFromRecord(editData, ORG_ID, loginUserName)
+      : emptyForm(ORG_ID, loginUserName)
+  );
   const [fieldErrors, setFieldErrors] = useState({});
-  const [clientTableErrors, setClientTableErrors] = useState([{}]);
 
   const fieldLabels = {
     screenCode: "Screen Code",
@@ -61,95 +72,141 @@ const DocTypeManager = () => {
     desc: "Description",
   };
 
+  // ------------------------------------------------------------
+  // Load screens + dup-check list
+  // ------------------------------------------------------------
   useEffect(() => {
-    fetchInitialData();
+    fetchScreens();
     fetchDocTypeList();
   }, []);
 
-  const fetchInitialData = async () => {
+  // ------------------------------------------------------------
+  // Load the record via getDocumentTypeMasterById when editing
+  // ------------------------------------------------------------
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadRecord = async () => {
+      if (!resolvedEditId) {
+        setForm(emptyForm(ORG_ID, loginUserName));
+        setFieldErrors({});
+        return;
+      }
+
+      try {
+        setLoadingRecord(true);
+        const response = await docTypeAPI.getDocumentTypeMasterById(resolvedEditId);
+        const body = response?.data ?? response;
+
+        const record =
+          body?.paramObjectsMap?.documentTypeMasterVO ||
+          body?.paramObjectsMap?.documentTypeMasterVo;
+
+        if (!cancelled && record) {
+          setForm(formFromRecord(record, ORG_ID, loginUserName));
+        }
+      } catch (error) {
+        console.error("Error fetching document type by id:", error);
+        addToast("Failed to load document type details", "error");
+
+        // Fall back to whatever the list gave us (so the form isn't empty)
+        if (!cancelled && editData) {
+          setForm(formFromRecord(editData, ORG_ID, loginUserName));
+        }
+      } finally {
+        if (!cancelled) {
+          setFieldErrors({});
+          setLoadingRecord(false);
+        }
+      }
+    };
+
+    loadRecord();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resolvedEditId]);
+
+  // ------------------------------------------------------------
+  // Data fetching
+  // ------------------------------------------------------------
+  const fetchScreens = async () => {
     try {
       setLoading(true);
-      const [screensRes, clientsRes] = await Promise.all([
-        docTypeAPI.getAllScreens(),
-        docTypeAPI.getAllClients(ORG_ID),
-      ]);
+      const res = await docTypeAPI.getAllScreens();
+      const body = res?.data ?? res;
 
-      if (screensRes?.status) {
-        const sortedScreens = (
-          screensRes.paramObjectsMap.screenNamesVO || []
-        ).sort((a, b) => a.screenName.localeCompare(b.screenName));
-        setScreenList(sortedScreens);
-      }
+      const list =
+        body?.paramObjectsMap?.screenNamesVO ||
+        body?.paramObjectsMap?.screenNamesVo ||
+        body?.paramObjectsMap?.ScreenNamesVO ||
+        [];
 
-      if (clientsRes?.status) {
-        const sortedClients = (
-          clientsRes.paramObjectsMap.CustomerVO || []
-        ).sort((a, b) => a.clientCode.localeCompare(b.clientCode));
-        setClientList(sortedClients);
-      }
+      const sorted = [...list].sort((a, b) =>
+        (a.screenName || "").localeCompare(b.screenName || "")
+      );
+
+      setScreenList(sorted);
+
+      setForm((prev) => {
+        if (prev.screenCode && !prev.screenName) {
+          const match = sorted.find((s) => s.screenCode === prev.screenCode);
+          if (match) return { ...prev, screenName: match.screenName };
+        }
+        return prev;
+      });
     } catch (error) {
-      console.error("Error fetching initial data:", error);
-      addToast("Failed to load initial data", "error");
+      console.error("Error fetching screens:", error);
+      addToast("Failed to load screens", "error");
     } finally {
       setLoading(false);
     }
   };
 
-  // Still fetched (silently) so duplicate-docCode validation on save
-  // continues to work now that the visible list panel is gone.
   const fetchDocTypeList = async () => {
     try {
-      const res = await docTypeAPI.getAllDocumentTypes(ORG_ID);
-      if (res?.status) {
-        const list =
-          res.paramObjectsMap?.documentTypeVO ||
-          res.paramObjectsMap?.DocumentTypeVO ||
-          [];
-        setDocTypeList(list);
-      }
+      const res = await docTypeAPI.getAllDocumentTypeMaster(ORG_ID);
+      const body = res?.data ?? res;
+      const rows =
+        body?.paramObjectsMap?.documentTypeMasterList ||
+        body?.paramObjectsMap?.documentTypeMasterVo ||
+        [];
+      setDocTypeList(Array.isArray(rows) ? rows : []);
     } catch (error) {
       console.error("Error fetching document type list:", error);
     }
   };
 
+  // ------------------------------------------------------------
+  // Handlers
+  // ------------------------------------------------------------
   const resetForm = () => {
     setForm(emptyForm(ORG_ID, loginUserName));
-    setClientTableData([{ id: nextRowId.current++, clientCode: "", client: "" }]);
-    setClientTableErrors([{}]);
     setFieldErrors({});
   };
 
   const handleChange = (e) => {
-    const { name, value, type, checked } = e.target;
+    const { name, value } = e.target;
 
     if (fieldErrors[name]) {
       setFieldErrors((prev) => ({ ...prev, [name]: "" }));
     }
 
-    if (name === "active") {
-      setForm((prev) => ({ ...prev, [name]: checked }));
-      return;
-    }
-
     const codeRegex = /^[A-Za-z0-9_-]*$/;
     let errorMessage = "";
 
-    switch (name) {
-      case "docCode":
-        if (!codeRegex.test(value)) {
-          errorMessage =
-            "Only alphanumeric characters, hyphens and underscores allowed";
-        } else if (value.length > 20) {
-          errorMessage = "Document Code must be maximum 20 characters";
-        }
-        break;
-      case "desc":
-        if (value.length > 200) {
-          errorMessage = "Description must be maximum 200 characters";
-        }
-        break;
-      default:
-        break;
+    if (name === "docCode") {
+      if (!codeRegex.test(value)) {
+        errorMessage =
+          "Only alphanumeric characters, hyphens and underscores allowed";
+      } else if (value.length > 20) {
+        errorMessage = "Document Code must be maximum 20 characters";
+      }
+    } else if (name === "desc") {
+      if (value.length > 200) {
+        errorMessage = "Description must be maximum 200 characters";
+      }
     }
 
     if (errorMessage) {
@@ -160,8 +217,6 @@ const DocTypeManager = () => {
     }
   };
 
-  // Plain native <select> onChange — always e.target.value, no ambiguity.
-  // This is the auto-fill: pick a screen code, screen name fills itself in.
   const handleScreenCodeChange = (e) => {
     const value = e.target.value;
 
@@ -169,9 +224,8 @@ const DocTypeManager = () => {
       setFieldErrors((prev) => ({ ...prev, screenCode: "" }));
     }
 
-    const selectedScreen = screenList.find(
-      (screen) => screen.screenCode === value
-    );
+    const selectedScreen = screenList.find((s) => s.screenCode === value);
+
     setForm((prev) => ({
       ...prev,
       screenCode: value,
@@ -179,184 +233,102 @@ const DocTypeManager = () => {
     }));
   };
 
-  const handleClientTableChange = (index, field, value) => {
-    const newData = [...clientTableData];
-    newData[index] = { ...newData[index], [field]: value };
-
-    if (field === "clientCode") {
-      const selectedClient = clientList.find(
-        (client) => client.clientCode === value
-      );
-      newData[index].client = selectedClient ? selectedClient.client || "" : "";
-    }
-
-    setClientTableData(newData);
-
-    if (value && clientTableErrors[index]?.[field]) {
-      const newErrors = [...clientTableErrors];
-      newErrors[index] = { ...newErrors[index], [field]: "" };
-      setClientTableErrors(newErrors);
-    }
+  const toggleActive = () => {
+    setForm((prev) => ({ ...prev, active: !prev.active }));
   };
 
-  const addClientRow = () => {
-    setClientTableData((prev) => [
-      ...prev,
-      { id: nextRowId.current++, clientCode: "", client: "" },
-    ]);
-    setClientTableErrors((prev) => [...prev, {}]);
-  };
-
-  const removeClientRow = (index) => {
-    if (clientTableData.length === 1) return;
-    setClientTableData((prev) => prev.filter((_, i) => i !== index));
-    setClientTableErrors((prev) => prev.filter((_, i) => i !== index));
-  };
-
+  // ------------------------------------------------------------
+  // Save
+  // ------------------------------------------------------------
   const handleSave = async () => {
     const errors = {};
 
-    if (!form.screenCode.trim())
-      errors.screenCode = "Screen Code is required";
-
-    if (!form.docCode.trim())
-      errors.docCode = "Document Code is required";
-
-    if (!form.desc.trim())
-      errors.desc = "Description is required";
-
+    if (!form.screenCode.trim()) errors.screenCode = "Screen Code is required";
+    if (!form.docCode.trim()) errors.docCode = "Document Code is required";
+    if (!form.desc.trim()) errors.desc = "Description is required";
     if (form.docCode.trim().length > 20)
       errors.docCode = "Document Code must be maximum 20 characters";
-
     if (form.desc.trim().length > 200)
       errors.desc = "Description must be maximum 200 characters";
 
-    const tableErrors = clientTableData.map((row) => {
-      const rowErrors = {};
-
-      if (!row.clientCode)
-        rowErrors.clientCode = "Client code is required";
-
-      return rowErrors;
-    });
-
     setFieldErrors(errors);
-    setClientTableErrors(tableErrors);
 
-    const hasTableErrors = tableErrors.some(
-      (e) => e.clientCode || e.client
-    );
-
-    if (Object.keys(errors).length > 0 || hasTableErrors) {
-      const allErrors = { ...errors };
-
-      let firstError = Object.keys(allErrors)[0];
-
-      if (!firstError && hasTableErrors) {
-        firstError = "clientTable";
-        allErrors[firstError] = "Please fill all client details";
-      }
-
-      if (firstError) {
-        const fieldLabel = fieldLabels[firstError] || firstError;
-        addToast(`${fieldLabel}: ${allErrors[firstError]}`, "error");
-      }
-
+    if (Object.keys(errors).length > 0) {
+      const firstError = Object.keys(errors)[0];
+      const fieldLabel = fieldLabels[firstError] || firstError;
+      addToast(`${fieldLabel}: ${errors[firstError]}`, "error");
       return;
     }
 
-    // -----------------------------
-    // Duplicate Document Code Check
-    // -----------------------------
+    // Duplicate check across the master list
     const duplicateDoc = docTypeList.find(
       (d) =>
-        d.docCode?.trim().toUpperCase() ===
-          form.docCode.trim().toUpperCase() &&
+        d.docCode?.trim().toUpperCase() === form.docCode.trim().toUpperCase() &&
         d.id !== form.id
     );
-
     if (duplicateDoc) {
       addToast("Document Code already exists.", "error");
       return;
     }
 
-    // -----------------------------
-    // Duplicate Client Check
-    // -----------------------------
-    const clientCodes = clientTableData.map((row) =>
-      row.clientCode.trim().toUpperCase()
-    );
-
-    if (new Set(clientCodes).size !== clientCodes.length) {
-      addToast("Duplicate clients are not allowed.", "error");
-      return;
-    }
-
     setIsSubmitting(true);
+
+    // ✅ Only send id when updating
+    const isUpdate = Boolean(form.id && form.id > 0);
 
     const payload = {
       screenCode: form.screenCode.trim(),
       screenName: form.screenName.trim(),
       docCode: form.docCode.trim(),
       description: form.desc.trim(),
-      documentTypeDetailsDTO: clientTableData.map((row) => ({
-        clientCode: row.clientCode.trim(),
-        client: row.client.trim(),
-      })),
-      active: form.active,
       orgId: ORG_ID,
       createdBy: loginUserName,
     };
 
-    try {
-      const response = await docTypeAPI.saveDocumentType(payload);
+    if (isUpdate) payload.id = form.id;
 
-      const status =
-        response?.data?.status === true ||
-        response?.data?.statusFlag === "Ok";
+    try {
+      const response = await docTypeAPI.saveDocumentTypeMaster(payload);
+      const body = response?.data ?? response;
+
+      const status = body?.status === true || body?.statusFlag === "Ok";
 
       if (status) {
         const successMessage =
-          response?.data?.paramObjectsMap?.message ||
-          (form.id
+          body?.paramObjectsMap?.message ||
+          (isUpdate
             ? "Document type updated successfully!"
             : "Document type created successfully!");
-
         addToast(successMessage, "success");
 
-        resetForm();
-
-        await fetchDocTypeList();
+        onSaveSuccess?.();
+        onBack?.();
       } else {
-        const errorMessage =
-          response?.data?.paramObjectsMap?.message ||
-          response?.data?.paramObjectsMap?.errorMessage ||
-          response?.data?.message ||
-          "Failed to save document type";
-
-        addToast(errorMessage, "error");
+        addToast(
+          body?.paramObjectsMap?.message ||
+          body?.paramObjectsMap?.errorMessage ||
+          body?.message ||
+          "Failed to save document type",
+          "error"
+        );
       }
     } catch (error) {
       console.error("Save Error:", error);
-
-      const errorMessage =
+      addToast(
         error.response?.data?.paramObjectsMap?.message ||
-        error.response?.data?.paramObjectsMap?.errorMessage ||
         error.response?.data?.message ||
-        "Save failed! Try again.";
-
-      addToast(errorMessage, "error");
+        "Save failed! Try again.",
+        "error"
+      );
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const clientOptions = clientList.map((client) => ({
-    value: client.clientCode,
-    label: `${client.clientCode} - ${client.client}`,
-  }));
-
-  if (loading) {
+  // ------------------------------------------------------------
+  // Render
+  // ------------------------------------------------------------
+  if (loading || loadingRecord) {
     return (
       <div className="p-4 max-w-3xl mx-auto animate-pulse">
         <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-6 space-y-6 h-96" />
@@ -368,16 +340,16 @@ const DocTypeManager = () => {
     <div className="p-4 sm:p-6 max-w-6xl mx-auto">
       <div className="mb-6">
         <h2 className="text-xl font-semibold text-gray-900 dark:text-white tracking-tight">
-          Document Types
+          {form.id ? "Edit Document Type" : "Add Document Type"}
         </h2>
         <p className="text-sm text-gray-500 dark:text-gray-400">
-          Create or edit a document type and link it to clients
+          {form.id
+            ? "Update the document type details"
+            : "Create a document type against a screen"}
         </p>
       </div>
 
-      {/* ============ FORM ============ */}
       <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm overflow-hidden">
-        {/* GENERAL INFO */}
         <div className="p-5 sm:p-6">
           <div className="flex items-center gap-2 mb-5">
             <div className="flex items-center justify-center h-8 w-8 rounded-lg bg-indigo-50 dark:bg-indigo-900/30">
@@ -389,9 +361,7 @@ const DocTypeManager = () => {
           </div>
 
           <div className="flex flex-col gap-4">
-            {/* Screen Code / Screen Name / Document Code — one row on laptop+ */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* Screen Code — native select, drives the auto-fill */}
               <div className="flex flex-col">
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
                   Screen Code *
@@ -401,15 +371,17 @@ const DocTypeManager = () => {
                     name="screenCode"
                     value={form.screenCode}
                     onChange={handleScreenCodeChange}
-                    className={`w-full appearance-none px-3 py-2.5 pr-8 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500 transition-colors ${
-                      fieldErrors.screenCode
+                    className={`w-full appearance-none px-3 py-2.5 pr-8 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500 transition-colors ${fieldErrors.screenCode
                         ? "border-red-400"
                         : "border-gray-200 dark:border-gray-600"
-                    }`}
+                      }`}
                   >
                     <option value="">Select screen code</option>
-                    {screenList.map((screen) => (
-                      <option key={screen.screenCode} value={screen.screenCode}>
+                    {screenList.map((screen, idx) => (
+                      <option
+                        key={`${screen.screenCode}-${idx}`}
+                        value={screen.screenCode}
+                      >
                         {screen.screenCode} - {screen.screenName}
                       </option>
                     ))}
@@ -423,7 +395,6 @@ const DocTypeManager = () => {
                 )}
               </div>
 
-              {/* Screen Name — auto-filled, read only */}
               <div className="flex flex-col">
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
                   Screen Name
@@ -437,7 +408,6 @@ const DocTypeManager = () => {
                 />
               </div>
 
-              {/* Document Code */}
               <div className="flex flex-col">
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
                   Document Code *
@@ -448,11 +418,10 @@ const DocTypeManager = () => {
                   value={form.docCode}
                   onChange={handleChange}
                   placeholder="e.g. INV-001"
-                  className={`w-full px-3 py-2.5 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500 transition-colors ${
-                    fieldErrors.docCode
+                  className={`w-full px-3 py-2.5 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500 transition-colors ${fieldErrors.docCode
                       ? "border-red-400"
                       : "border-gray-200 dark:border-gray-600"
-                  }`}
+                    }`}
                 />
                 {fieldErrors.docCode && (
                   <p className="mt-1.5 text-xs text-red-600 dark:text-red-400">
@@ -462,18 +431,16 @@ const DocTypeManager = () => {
               </div>
             </div>
 
-            {/* Description */}
             <div>
               <div className="flex items-center justify-between mb-1.5">
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                   Description *
                 </label>
                 <span
-                  className={`text-xs ${
-                    form.desc.length > 200
+                  className={`text-xs ${form.desc.length > 200
                       ? "text-red-500"
                       : "text-gray-400 dark:text-gray-500"
-                  }`}
+                    }`}
                 >
                   {form.desc.length}/200
                 </span>
@@ -485,11 +452,10 @@ const DocTypeManager = () => {
                 rows={3}
                 maxLength={200}
                 placeholder="Briefly describe this document type"
-                className={`w-full px-3 py-2.5 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm placeholder:text-gray-400 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500 ${
-                  fieldErrors.desc
+                className={`w-full px-3 py-2.5 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm placeholder:text-gray-400 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500 ${fieldErrors.desc
                     ? "border-red-400"
                     : "border-gray-200 dark:border-gray-600"
-                }`}
+                  }`}
               />
               {fieldErrors.desc && (
                 <p className="mt-1.5 text-xs text-red-600 dark:text-red-400">
@@ -497,149 +463,9 @@ const DocTypeManager = () => {
                 </p>
               )}
             </div>
-
-            {/* Active toggle */}
-            <div className="flex flex-col">
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
-                Status
-              </label>
-              <div className="flex items-center gap-3 h-[42px]">
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={form.active}
-                  onClick={() =>
-                    handleChange({
-                      target: { name: "active", type: "checkbox", checked: !form.active },
-                    })
-                  }
-                  className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500/40 ${
-                    form.active ? "bg-indigo-600" : "bg-gray-300 dark:bg-gray-600"
-                  }`}
-                >
-                  <span
-                    className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
-                      form.active ? "translate-x-6" : "translate-x-1"
-                    }`}
-                  />
-                </button>
-                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                  {form.active ? "Active" : "Inactive"}
-                </span>
-              </div>
-            </div>
           </div>
         </div>
 
-        {/* CLIENT DETAILS */}
-        {/* <div className="border-t border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-900/20 p-5 sm:p-6">
-          <div className="flex justify-between items-center mb-4">
-            <div className="flex items-center gap-2">
-              <div className="flex items-center justify-center h-8 w-8 rounded-lg bg-purple-50 dark:bg-purple-900/30">
-                <Users className="h-4 w-4 text-purple-600 dark:text-purple-400" />
-              </div>
-              <div>
-                <h3 className="text-sm font-semibold text-gray-900 dark:text-white uppercase tracking-wide">
-                  Client Details
-                </h3>
-                <p className="text-xs text-gray-500 dark:text-gray-400">
-                  Link this document type to one or more clients
-                </p>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={addClientRow}
-              className="flex items-center gap-1.5 px-3 py-2 bg-purple-600 hover:bg-purple-700 active:bg-purple-800 text-white rounded-lg text-sm font-medium transition-colors shadow-sm"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              Add Client
-            </button>
-          </div>
-
-          <div className="rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden bg-white dark:bg-gray-800">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm table-fixed">
-                <colgroup>
-                  <col className="w-[45%]" />
-                  <col className="w-[45%]" />
-                  <col className="w-[10%]" />
-                </colgroup>
-                <thead>
-                  <tr className="bg-gray-50 dark:bg-gray-700/60 text-gray-500 dark:text-gray-400 text-xs uppercase tracking-wide">
-                    <th className="p-3 text-left font-medium">Client Code *</th>
-                    <th className="p-3 text-left font-medium">Client Name</th>
-                    <th className="p-3 text-left font-medium">
-                      <span className="sr-only">Action</span>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                  {clientTableData.map((row, index) => (
-                    <tr key={row.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/40 transition-colors">
-                      <td className="p-3 align-top">
-                        <div className="relative">
-                          <select
-                            value={row.clientCode}
-                            onChange={(e) =>
-                              handleClientTableChange(index, "clientCode", e.target.value)
-                            }
-                            className={`w-full appearance-none px-3 py-2 pr-8 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500 transition-colors ${
-                              clientTableErrors[index]?.clientCode
-                                ? "border-red-400"
-                                : "border-gray-200 dark:border-gray-600"
-                            }`}
-                          >
-                            <option value="">Select client code</option>
-                            {clientOptions.map((client) => (
-                              <option key={client.value} value={client.value}>
-                                {client.label}
-                              </option>
-                            ))}
-                          </select>
-                          <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
-                        </div>
-                        {clientTableErrors[index]?.clientCode && (
-                          <p className="mt-1.5 text-xs text-red-600 dark:text-red-400">
-                            {clientTableErrors[index].clientCode}
-                          </p>
-                        )}
-                      </td>
-                      <td className="p-3 align-top">
-                        <input
-                          type="text"
-                          value={row.client}
-                          readOnly
-                          placeholder="Auto-filled"
-                          className="w-full px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700/50 text-gray-600 dark:text-gray-300 text-sm cursor-not-allowed placeholder:text-gray-400"
-                        />
-                        {clientTableErrors[index]?.client && (
-                          <p className="mt-1.5 text-xs text-red-600 dark:text-red-400">
-                            {clientTableErrors[index].client}
-                          </p>
-                        )}
-                      </td>
-                      <td className="p-3 align-top text-center">
-                        {clientTableData.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={() => removeClientRow(index)}
-                            aria-label="Remove client row"
-                            className="p-2 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div> */}
-
-        {/* ACTIONS */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 px-5 sm:px-6 py-4 border-t border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800">
           <div className="flex items-center gap-1.5 text-xs text-gray-400 dark:text-gray-500">
             <FileText className="h-3.5 w-3.5" />
@@ -647,11 +473,11 @@ const DocTypeManager = () => {
           </div>
           <div className="flex gap-2 w-full sm:w-auto">
             <button
-              onClick={resetForm}
+              onClick={onBack ?? resetForm}
               disabled={isSubmitting}
               className="flex items-center justify-center gap-1.5 px-4 py-2 border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
             >
-              <X className="h-3.5 w-3.5" /> Clear
+              <X className="h-3.5 w-3.5" /> Cancel
             </button>
             <button
               onClick={handleSave}
@@ -660,9 +486,24 @@ const DocTypeManager = () => {
             >
               {isSubmitting ? (
                 <>
-                  <svg className="h-3.5 w-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  <svg
+                    className="h-3.5 w-3.5 animate-spin"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    />
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                    />
                   </svg>
                   Saving...
                 </>
@@ -680,4 +521,4 @@ const DocTypeManager = () => {
   );
 };
 
-export default DocTypeManager;
+export default DocTypeForm;

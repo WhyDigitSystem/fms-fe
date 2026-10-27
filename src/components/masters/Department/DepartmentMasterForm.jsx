@@ -10,20 +10,21 @@ const DepartmentMasterForm = ({ editData, onBack }) => {
 
     const [form, setForm] = useState({
         code: "",
-        departmentName: "",
+        department: "",   // API field name
         active: true,
     });
 
     const [fieldErrors, setFieldErrors] = useState({
         code: "",
-        departmentName: "",
+        department: "",
     });
 
     useEffect(() => {
         if (editData) {
             setForm({
                 code: editData.code || "",
-                departmentName: editData.departmentName || "",
+                // API returns `department`
+                department: editData.department || editData.departmentName || "",
                 active: editData.active === "Active" || editData.active === true,
             });
         }
@@ -37,31 +38,32 @@ const DepartmentMasterForm = ({ editData, onBack }) => {
                 ...prev,
                 [name]: checked,
             }));
-        } else {
-            // Allow only alphabets and spaces for department name
-            if (name === "departmentName") {
-                const nameRegex = /^[A-Za-z ]*$/;
-                if (!nameRegex.test(value)) {
-                    setFieldErrors((prev) => ({ ...prev, [name]: "Only alphabets allowed" }));
-                    return;
-                }
-            }
-
-            // Allow alphanumeric and special characters for code
-            if (name === "code") {
-                const codeRegex = /^[a-zA-Z0-9#_\-\/\\]*$/;
-                if (!codeRegex.test(value)) {
-                    setFieldErrors((prev) => ({ ...prev, [name]: "Invalid Format" }));
-                    return;
-                }
-            }
-
-            setForm((prev) => ({
-                ...prev,
-                [name]: value.toUpperCase(),
-            }));
-            setFieldErrors((prev) => ({ ...prev, [name]: "" }));
+            return;
         }
+
+        // Allow only alphabets and spaces for department name
+        if (name === "department") {
+            const nameRegex = /^[A-Za-z ]*$/;
+            if (!nameRegex.test(value)) {
+                setFieldErrors((prev) => ({ ...prev, [name]: "Only alphabets allowed" }));
+                return;
+            }
+        }
+
+        // Allow alphanumeric and special characters for code
+        if (name === "code") {
+            const codeRegex = /^[a-zA-Z0-9#_\-\/\\]*$/;
+            if (!codeRegex.test(value)) {
+                setFieldErrors((prev) => ({ ...prev, [name]: "Invalid Format" }));
+                return;
+            }
+        }
+
+        setForm((prev) => ({
+            ...prev,
+            [name]: value.toUpperCase(),
+        }));
+        setFieldErrors((prev) => ({ ...prev, [name]: "" }));
     };
 
     const validateForm = () => {
@@ -69,24 +71,22 @@ const DepartmentMasterForm = ({ editData, onBack }) => {
         if (!form.code) {
             errors.code = "Department Code is required";
         }
-        if (!form.departmentName) {
-            errors.departmentName = "Department Name is required";
+        if (!form.department) {
+            errors.department = "Department Name is required";
         }
         setFieldErrors(errors);
         return Object.keys(errors).length === 0;
     };
 
     const handleSave = async () => {
-        if (!validateForm()) {
-            return;
-        }
+        if (!validateForm()) return;
 
         setIsLoading(true);
         try {
             const payload = {
                 ...(editData?.id && { id: editData.id }),
                 code: form.code,
-                departmentName: form.departmentName,
+                department: form.department,   // ✅ API field name
                 active: form.active,
                 orgId: ORG_ID,
                 createdBy: localStorage.getItem("userName") || "SYSTEM",
@@ -172,18 +172,18 @@ const DepartmentMasterForm = ({ editData, onBack }) => {
                         </label>
                         <input
                             type="text"
-                            name="departmentName"
-                            value={form.departmentName || ""}
+                            name="department"          /* ✅ matches form key + API */
+                            value={form.department || ""}
                             onChange={handleFormChange}
                             className={`w-full px-3 py-2 text-sm border rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 
-                ${fieldErrors.departmentName
+                ${fieldErrors.department
                                     ? "border-red-500 dark:border-red-500 focus:border-red-500 focus:ring-red-500/20"
                                     : "border-gray-300 dark:border-gray-600 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
                                 } outline-none transition-all duration-200`}
                             placeholder="Enter department name"
                         />
-                        {fieldErrors.departmentName && (
-                            <p className="mt-1 text-xs text-red-500">{fieldErrors.departmentName}</p>
+                        {fieldErrors.department && (
+                            <p className="mt-1 text-xs text-red-500">{fieldErrors.department}</p>
                         )}
                     </div>
 

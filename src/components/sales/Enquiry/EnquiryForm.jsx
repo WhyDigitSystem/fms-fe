@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft,
   ArrowRight,
@@ -11,6 +11,7 @@ import {
   Ship,
   Truck,
 } from "lucide-react";
+import EnquiryAPI from "../../../api/sales/enquiryAPI";
 
 const today = () => {
   const d = new Date();
@@ -18,6 +19,11 @@ const today = () => {
     d.getDate(),
   ).padStart(2, "0")}`;
 };
+
+const titleCase = (v) =>
+  String(v || "")
+    .toLowerCase()
+    .replace(/(^|\s)\S/g, (s) => s.toUpperCase());
 
 const emptyCargo = {
   cargoType: "LCL",
@@ -148,9 +154,8 @@ const TextField = ({
       aria-invalid={!!error}
       aria-required={required || undefined}
       onChange={(e) => onChange?.(e.target.value)}
-      className={`${inputClass} ${
-        error ? "!border-rose-500 focus:!ring-rose-500/10" : ""
-      }`}
+      className={`${inputClass} ${error ? "!border-rose-500 focus:!ring-rose-500/10" : ""
+        }`}
       {...rest}
     />
   </Field>
@@ -174,9 +179,8 @@ const SelectField = ({
       aria-invalid={!!error}
       aria-required={required || undefined}
       onChange={(e) => onChange(e.target.value)}
-      className={`${inputClass} ${
-        error ? "!border-rose-500 focus:!ring-rose-500/10" : ""
-      }`}
+      className={`${inputClass} ${error ? "!border-rose-500 focus:!ring-rose-500/10" : ""
+        }`}
     >
       <option value="">{placeholder}</option>
       {options.map((option) => {
@@ -199,18 +203,16 @@ const ModeCard = ({ value, hint, icon: Icon, selected, onClick }) => (
     type="button"
     onClick={() => onClick(value)}
     aria-pressed={selected}
-    className={`flex w-full items-center gap-2 rounded-lg border p-2 text-left transition ${
-      selected
+    className={`flex w-full items-center gap-2 rounded-lg border p-2 text-left transition ${selected
         ? "border-blue-600 bg-blue-50 ring-2 ring-blue-600/10 dark:bg-blue-500/10"
         : "border-slate-200 bg-white hover:border-slate-300 dark:border-gray-700 dark:bg-gray-900"
-    }`}
+      }`}
   >
     <span
-      className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md ${
-        selected
+      className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md ${selected
           ? "bg-blue-600 text-white"
           : "bg-slate-100 text-slate-500 dark:bg-gray-800 dark:text-gray-300"
-      }`}
+        }`}
     >
       <Icon size={18} />
     </span>
@@ -248,7 +250,7 @@ const StepHeader = ({ step, title, subtitle }) => (
 /* Screen                                                              */
 /* ------------------------------------------------------------------ */
 
-export default function EnquiryForm({ onBack = () => {}, onSave, editData }) {
+export default function EnquiryForm({ onBack = () => { }, onSave, editData }) {
   const [step, setStep] = useState(1);
   const [form, setForm] = useState(() => ({
     ...initialForm,
@@ -263,26 +265,123 @@ export default function EnquiryForm({ onBack = () => {}, onSave, editData }) {
   const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState("");
 
-  useEffect(() => {
-    if (editData) {
+  // Enquiry docId + record loading state
+  const [enquiryDocId, setEnquiryDocId] = useState("");
+  const [loadingDocId, setLoadingDocId] = useState(false);
+  const [recordLoading, setRecordLoading] = useState(false);
+
+  const orgId = parseInt(localStorage.getItem("orgId"));
+  const branch = Number(localStorage.getItem("branchId"));
+  const loginUserName = localStorage.getItem("userName") || "SYSTEM";
+
+  // --------------------------------------------------------------
+  // Fetch auto-generated enquiry number when creating
+  // --------------------------------------------------------------
+  const fetchEnquiryDocId = useCallback(async () => {
+    try {
+      setLoadingDocId(true);
+      const docId = await EnquiryAPI.getEnquiryDocId(orgId);
+      setEnquiryDocId(docId || "");
+      setForm((prev) => ({ ...prev, enquiryNo: docId || "" }));
+    } catch (error) {
+      console.error("Failed to load enquiry DocId:", error);
+      setErrors((prev) => ({
+        ...prev,
+        enquiryNo: "Unable to fetch enquiry number.",
+      }));
+    } finally {
+      setLoadingDocId(false);
+    }
+  }, [orgId]);
+
+  // --------------------------------------------------------------
+  // Load full record by id in edit mode
+  // --------------------------------------------------------------
+  const fetchEnquiryById = useCallback(async (id) => {
+    try {
+      setRecordLoading(true);
+      const record = await EnquiryAPI.getEnquiryById(id);
+      if (!record) return;
+
+      const apiMode = String(record.shipmentMode || "").toUpperCase();
+
+      const pickOrigin =
+        apiMode === "SEA"
+          ? record.originPort
+          : apiMode === "AIR"
+            ? record.originAirport
+            : apiMode === "ROAD"
+              ? record.originTerminal
+              : record.originPort ||
+              record.originAirport ||
+              record.originTerminal;
+
+      const pickDestination =
+        apiMode === "SEA"
+          ? record.destinationPort
+          : apiMode === "AIR"
+            ? record.destinationAirport
+            : apiMode === "ROAD"
+              ? record.destinationTerminal
+              : record.destinationPort ||
+              record.destinationAirport ||
+              record.destinationTerminal;
+
       setForm({
-        ...initialForm,
-        ...editData,
-        enquiryDate: editData.enquiryDate || today(),
-        cargoDetails: { ...emptyCargo, ...(editData.cargoDetails || {}) },
+        id: record.id || id,
+        enquiryNo: record.docId || "",
+        enquiryDate: record.docDate || today(),
+        customer: record.customer || "",
+        movement: record.movement ? titleCase(record.movement) : "Export",
+        mode: record.shipmentMode ? titleCase(record.shipmentMode) : "Sea",
+        origin: record.fromLocation || "",
+        destination: record.toLocation || "",
+        cargo: record.cargoDescription || "",
+        pol: pickOrigin || "",
+        pod: pickDestination || "",
+        status: "Open",
+        cargoDetails: {
+          cargoType: record.cargoType || "",
+          containerSize: "20 FT",
+          containers: "",
+          cbm: record.volumeCbm != null ? String(record.volumeCbm) : "",
+          weight:
+            record.grossWeightKg != null ? String(record.grossWeightKg) : "",
+          packages:
+            record.noOfPackages != null ? String(record.noOfPackages) : "",
+          length: record.lengthCm != null ? String(record.lengthCm) : "",
+          width: record.widthCm != null ? String(record.widthCm) : "",
+          height: record.heightCm != null ? String(record.heightCm) : "",
+          vehicleType: record.vehicleType || "",
+        },
       });
+      setEnquiryDocId(record.docId || "");
+    } catch (error) {
+      console.error("Failed to load enquiry:", error);
+      setErrors((prev) => ({
+        ...prev,
+        submit: "Failed to load enquiry details.",
+      }));
+    } finally {
+      setRecordLoading(false);
+    }
+  }, []);
+
+  // --------------------------------------------------------------
+  // On editData change: fetch by id, or fetch a fresh docId
+  // --------------------------------------------------------------
+  useEffect(() => {
+    if (editData?.id) {
+      fetchEnquiryById(editData.id);
       setStep(3);
     } else {
-      setForm({
-        ...initialForm,
-        enquiryDate: today(),
-        cargoDetails: { ...emptyCargo },
-      });
+      fetchEnquiryDocId();
       setStep(1);
     }
     setErrors({});
     setToast("");
-  }, [editData]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editData?.id]);
 
   const cargo = form.cargoDetails;
 
@@ -358,13 +457,11 @@ export default function EnquiryForm({ onBack = () => {}, onSave, editData }) {
     const nextErrors = {};
     const positive = (value) => value !== "" && Number(value) > 0;
 
-    // Combined Mode & Movement validations
     if (currentStep === 1) {
       if (!form.mode) nextErrors.mode = "Select a shipment mode.";
       if (!form.movement) nextErrors.movement = "Select Import or Export.";
     }
 
-    // Route validations
     if (currentStep === 2) {
       if (!form.origin.trim()) nextErrors.origin = "Origin is required.";
       if (!form.destination.trim()) {
@@ -378,7 +475,6 @@ export default function EnquiryForm({ onBack = () => {}, onSave, editData }) {
       }
     }
 
-    // Cargo Details validations
     if (currentStep === 3) {
       if (!form.enquiryDate) nextErrors.enquiryDate = "Date is required.";
       if (!form.customer.trim()) nextErrors.customer = "Customer is required.";
@@ -455,6 +551,9 @@ export default function EnquiryForm({ onBack = () => {}, onSave, editData }) {
     setStep(target);
   };
 
+  // --------------------------------------------------------------
+  // Save — map form state to the exact API payload
+  // --------------------------------------------------------------
   const handleSave = async () => {
     if (!validateStep(3)) return;
     if (typeof onSave !== "function") {
@@ -466,7 +565,59 @@ export default function EnquiryForm({ onBack = () => {}, onSave, editData }) {
     }
 
     setSubmitting(true);
+
     try {
+      const originPort = form.mode === "Sea" ? form.pol : "";
+      const destinationPort = form.mode === "Sea" ? form.pod : "";
+      const originAirport = form.mode === "Air" ? form.pol : "";
+      const destinationAirport = form.mode === "Air" ? form.pod : "";
+      const originTerminal = form.mode === "Road" ? form.pol : "";
+      const destinationTerminal = form.mode === "Road" ? form.pod : "";
+
+      const toNumber = (value) => {
+        const n = Number(value);
+        return Number.isFinite(n) ? n : 0;
+      };
+
+      const isUpdate = Boolean(form.id && form.id > 0);
+
+      const payload = {
+        id: isUpdate ? form.id : undefined,
+        orgId,
+        branch: Number(branch),
+        createdBy: loginUserName,
+
+        shipmentMode: form.mode,
+        movement: form.movement,
+
+        fromLocation: form.origin.trim(),
+        toLocation: form.destination.trim(),
+        originPort,
+        destinationPort,
+        originAirport,
+        destinationAirport,
+        originTerminal,
+        destinationTerminal,
+
+        cargoDescription: form.cargo.trim(),
+        cargoType: cargo.cargoType || "",
+        grossWeightKg: toNumber(cargo.weight),
+        volumeCbm: toNumber(cargo.cbm),
+        noOfPackages: toNumber(cargo.packages),
+        lengthCm: toNumber(cargo.length),
+        widthCm: toNumber(cargo.width),
+        heightCm: toNumber(cargo.height),
+        vehicleType: cargo.vehicleType || "",
+
+        customer: form.customer.trim(),
+        remarks: "",
+        cancelRemarks: "",
+      };
+
+      if (!isUpdate) delete payload.id;
+
+      const result = await EnquiryAPI.createUpdateEnquiry(payload);
+
       await onSave({
         ...form,
         customer: form.customer.trim(),
@@ -476,9 +627,12 @@ export default function EnquiryForm({ onBack = () => {}, onSave, editData }) {
         pol: form.pol.trim(),
         pod: form.pod.trim(),
         cargoDetails: { ...cargo },
+        payload,
+        result,
       });
+
       setToast(
-        editData?.id
+        isUpdate
           ? "Enquiry updated successfully"
           : "Enquiry saved successfully",
       );
@@ -487,7 +641,10 @@ export default function EnquiryForm({ onBack = () => {}, onSave, editData }) {
       console.error("Unable to save enquiry:", error);
       setErrors((current) => ({
         ...current,
-        submit: "Unable to save enquiry. Please try again.",
+        submit:
+          error?.response?.data?.paramObjectsMap?.message ||
+          error?.response?.data?.message ||
+          "Unable to save enquiry. Please try again.",
       }));
     } finally {
       setSubmitting(false);
@@ -502,6 +659,36 @@ export default function EnquiryForm({ onBack = () => {}, onSave, editData }) {
   };
 
   const steps = ["Mode & Movement", "Route", "Cargo details"];
+
+  // Loading gate — either docId (create) or full record (edit)
+  if (loadingDocId || recordLoading) {
+    return (
+      <div className="flex h-[90dvh] w-full items-center justify-center bg-slate-100 dark:bg-gray-950">
+        <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-gray-300">
+          <svg
+            className="h-4 w-4 animate-spin"
+            viewBox="0 0 24 24"
+            fill="none"
+          >
+            <circle
+              className="opacity-25"
+              cx="12"
+              cy="12"
+              r="10"
+              stroke="currentColor"
+              strokeWidth="4"
+            />
+            <path
+              className="opacity-75"
+              fill="currentColor"
+              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+            />
+          </svg>
+          Loading enquiry...
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-[90dvh] w-full items-center justify-center overflow-hidden bg-slate-100 p-2 dark:bg-gray-950 sm:p-4">
@@ -560,17 +747,16 @@ export default function EnquiryForm({ onBack = () => {}, onSave, editData }) {
                   onClick={() => goToStep(stepNo)}
                   disabled={!clickable}
                   aria-current={step === stepNo ? "step" : undefined}
-                  className={`text-left ${clickable ? "cursor-pointer" : "cursor-default"}`}
+                  className={`text-left ${clickable ? "cursor-pointer" : "cursor-default"
+                    }`}
                 >
                   <div
-                    className={`h-1 rounded-full transition ${
-                      step >= stepNo ? "bg-blue-400" : "bg-white/20"
-                    }`}
+                    className={`h-1 rounded-full transition ${step >= stepNo ? "bg-blue-400" : "bg-white/20"
+                      }`}
                   />
                   <p
-                    className={`mt-1 truncate text-[9px] ${
-                      step >= stepNo ? "text-white" : "text-slate-400"
-                    }`}
+                    className={`mt-1 truncate text-[9px] ${step >= stepNo ? "text-white" : "text-slate-400"
+                      }`}
                   >
                     {title}
                   </p>
@@ -582,7 +768,6 @@ export default function EnquiryForm({ onBack = () => {}, onSave, editData }) {
 
         {/* Main Content */}
         <main className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-2">
-          
           {/* STEP 1: Combined Shipment Mode & Movement */}
           {step === 1 && (
             <div className="space-y-3">
@@ -591,9 +776,11 @@ export default function EnquiryForm({ onBack = () => {}, onSave, editData }) {
                 title="Shipment details"
                 subtitle="Choose the mode of transport and the movement direction."
               />
-              
+
               <div>
-                <p className="mb-1 text-[11px] font-medium text-slate-600 dark:text-gray-300">Shipment mode</p>
+                <p className="mb-1 text-[11px] font-medium text-slate-600 dark:text-gray-300">
+                  Shipment mode
+                </p>
                 <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-3">
                   {modes.map((mode) => (
                     <ModeCard
@@ -605,12 +792,16 @@ export default function EnquiryForm({ onBack = () => {}, onSave, editData }) {
                   ))}
                 </div>
                 {errors.mode && (
-                  <p className="mt-1 text-[10px] text-rose-500">{errors.mode}</p>
+                  <p className="mt-1 text-[10px] text-rose-500">
+                    {errors.mode}
+                  </p>
                 )}
               </div>
 
               <div>
-                <p className="mb-1 text-[11px] font-medium text-slate-600 dark:text-gray-300">Movement</p>
+                <p className="mb-1 text-[11px] font-medium text-slate-600 dark:text-gray-300">
+                  Movement
+                </p>
                 <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
                   {[
                     {
@@ -633,18 +824,16 @@ export default function EnquiryForm({ onBack = () => {}, onSave, editData }) {
                         type="button"
                         onClick={() => setField("movement", value)}
                         aria-pressed={selected}
-                        className={`flex items-center gap-2 rounded-lg border p-2 text-left transition ${
-                          selected
+                        className={`flex items-center gap-2 rounded-lg border p-2 text-left transition ${selected
                             ? "border-blue-600 bg-blue-50 ring-2 ring-blue-600/10 dark:bg-blue-500/10"
                             : "border-slate-200 hover:border-slate-300 dark:border-gray-700"
-                        }`}
+                          }`}
                       >
                         <span
-                          className={`flex h-8 w-8 items-center justify-center rounded-md ${
-                            selected
+                          className={`flex h-8 w-8 items-center justify-center rounded-md ${selected
                               ? "bg-blue-600 text-white"
                               : "bg-slate-100 text-slate-600 dark:bg-gray-800 dark:text-gray-300"
-                          }`}
+                            }`}
                         >
                           <Icon size={18} />
                         </span>
@@ -799,6 +988,7 @@ export default function EnquiryForm({ onBack = () => {}, onSave, editData }) {
                       value={form.enquiryNo}
                       placeholder="Auto-generated"
                       disabled
+                      error={errors.enquiryNo}
                     />
                     <TextField
                       label="Enquiry date"
@@ -1018,7 +1208,7 @@ export default function EnquiryForm({ onBack = () => {}, onSave, editData }) {
                     )}
                   </div>
 
-                  <div className="grid grid-cols-2 gap-1.5 border-t border-slate-100 pt-1.5 dark:border-gray-700">
+                  {/* <div className="grid grid-cols-2 gap-1.5 border-t border-slate-100 pt-1.5 dark:border-gray-700"> */}
                     <div className="rounded-md bg-slate-50 px-2 py-1 dark:bg-gray-900">
                       <p className="text-[10px] text-slate-500 dark:text-gray-400">
                         Gross weight
@@ -1030,18 +1220,7 @@ export default function EnquiryForm({ onBack = () => {}, onSave, editData }) {
                         kg
                       </p>
                     </div>
-                    <div className="rounded-md bg-slate-50 px-2 py-1 dark:bg-gray-900">
-                      <p className="text-[10px] text-slate-500 dark:text-gray-400">
-                        Calculated volume
-                      </p>
-                      <p className="text-xs font-bold text-slate-900 dark:text-white">
-                        {totalVolume.toLocaleString(undefined, {
-                          maximumFractionDigits: 4,
-                        })}{" "}
-                        CBM
-                      </p>
-                    </div>
-                  </div>
+                  {/* </div> */}
                 </Section>
               </div>
 

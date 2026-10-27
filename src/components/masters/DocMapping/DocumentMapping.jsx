@@ -2,10 +2,9 @@ import React, { useState } from "react";
 import DocumentMappingForm from "./DocumentMappingForm";
 import DocumentMappingList from "./DocumentMappingList";
 
-
 const DocumentMapping = () => {
   const [theme] = useState(localStorage.getItem("theme") || "light");
-  const [currentView, setCurrentView] = useState("list"); // "list", "form"
+  const [currentView, setCurrentView] = useState("list");
   const [selectedMapping, setSelectedMapping] = useState(null);
   const orgId = localStorage.getItem("orgId");
 
@@ -37,7 +36,7 @@ const DocumentMapping = () => {
           orgId={orgId}
         />
       )}
-      
+
       {currentView === "form" && (
         <DocumentMappingForm
           onBack={handleBackToList}
@@ -46,8 +45,6 @@ const DocumentMapping = () => {
           orgId={orgId}
         />
       )}
-      
-      
     </div>
   );
 };

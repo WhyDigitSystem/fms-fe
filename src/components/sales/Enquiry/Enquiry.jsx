@@ -1,90 +1,44 @@
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import EnquiryList from "./EnquiryList";
 import EnquiryForm from "./EnquiryForm";
-
-const initialEnquiries = [
-  {
-    id: 1,
-    enquiryNo: "ENQ/26-27/0001",
-    enquiryDate: "2026-10-12",
-    customer: "ABC Exports",
-    movement: "Export",
-    mode: "Sea",
-    origin: "Bengaluru",
-    destination: "Hamburg",
-    cargo: "Electronics",
-    pol: "Bengaluru ICD",
-    pod: "Port of Hamburg",
-    status: "Open",
-    cargoDetails: {
-      cargoType: "LCL",
-      containers: "",
-      cbm: "10",
-      weight: "2000",
-      packages: "",
-      length: "",
-      width: "",
-      height: "",
-      vehicleType: "",
-    },
-  },
-  {
-    id: 2,
-    enquiryNo: "ENQ/26-27/0002",
-    enquiryDate: "2026-10-11",
-    customer: "Global Traders",
-    movement: "Import",
-    mode: "Air",
-    origin: "Frankfurt",
-    destination: "Bengaluru",
-    cargo: "Industrial Machinery",
-    pol: "Frankfurt Airport (FRA)",
-    pod: "Kempegowda International Airport (BLR)",
-    status: "Quoted",
-    cargoDetails: {
-      cargoType: "",
-      containers: "",
-      cbm: "",
-      weight: "450",
-      packages: "5",
-      length: "100",
-      width: "80",
-      height: "60",
-      vehicleType: "",
-    },
-  },
-  {
-    id: 3,
-    enquiryNo: "ENQ/26-27/0003",
-    enquiryDate: "2026-10-10",
-    customer: "Acme Industries",
-    movement: "Export",
-    mode: "Road",
-    origin: "Bengaluru",
-    destination: "Mumbai",
-    cargo: "Automotive Components",
-    pol: "Bengaluru Road Terminal",
-    pod: "Mumbai Road Freight Terminal",
-    status: "Open",
-    cargoDetails: {
-      cargoType: "",
-      containers: "",
-      cbm: "",
-      weight: "1200",
-      packages: "24",
-      length: "",
-      width: "",
-      height: "",
-      vehicleType: "Truck",
-    },
-  },
-];
+import EnquiryAPI from "../../../api/sales/enquiryAPI";
 
 const Enquiry = ({ onBack }) => {
   const [view, setView] = useState("list");
   const [selectedEnquiry, setSelectedEnquiry] = useState(null);
-  const [enquiries, setEnquiries] = useState(initialEnquiries);
+  const [enquiries, setEnquiries] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
+  const orgId = parseInt(localStorage.getItem("orgId")) || 1000000001;
+  // The list endpoint needs a branch id; fall back to orgId if not set.
+  const branchId = parseInt(localStorage.getItem("branchId")) || orgId;
+
+  // --------------------------------------------------------------
+  // Load enquiries from API
+  // --------------------------------------------------------------
+  const loadEnquiries = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const rows = await EnquiryAPI.getEnquiryByOrgId(branchId, orgId);
+      setEnquiries(Array.isArray(rows) ? rows : []);
+    } catch (err) {
+      console.error("Failed to load enquiries:", err);
+      setError("Failed to load enquiries. Please try again.");
+      setEnquiries([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [branchId, orgId]);
+
+  useEffect(() => {
+    loadEnquiries();
+  }, [loadEnquiries]);
+
+  // --------------------------------------------------------------
+  // Navigation
+  // --------------------------------------------------------------
   const handleAddNew = () => {
     setSelectedEnquiry(null);
     setView("add");
@@ -95,25 +49,16 @@ const Enquiry = ({ onBack }) => {
     setView("edit");
   };
 
-  const handleSave = (formData) => {
-    if (formData.id) {
-      setEnquiries((prev) =>
-        prev.map((item) => (item.id === formData.id ? { ...formData } : item)),
-      );
-    } else {
-      const nextId = Math.max(0, ...enquiries.map((item) => item.id)) + 1;
+  const handleBackToList = () => {
+    setSelectedEnquiry(null);
+    setView("list");
+  };
 
-      setEnquiries((prev) => [
-        {
-          ...formData,
-          id: nextId,
-          enquiryNo: `ENQ/26-27/${String(nextId).padStart(4, "0")}`,
-          status: "Open",
-        },
-        ...prev,
-      ]);
-    }
-
+  // --------------------------------------------------------------
+  // Save — the form already performs the API save; just refresh
+  // --------------------------------------------------------------
+  const handleSave = async () => {
+    await loadEnquiries();
     setSelectedEnquiry(null);
     setView("list");
   };
@@ -123,6 +68,9 @@ const Enquiry = ({ onBack }) => {
       {view === "list" ? (
         <EnquiryList
           enquiries={enquiries}
+          loading={loading}
+          error={error}
+          onRetry={loadEnquiries}
           onAddNew={handleAddNew}
           onEdit={handleEdit}
           onBack={onBack}
@@ -130,10 +78,7 @@ const Enquiry = ({ onBack }) => {
       ) : (
         <EnquiryForm
           editData={selectedEnquiry}
-          onBack={() => {
-            setView("list");
-            setSelectedEnquiry(null);
-          }}
+          onBack={handleBackToList}
           onSave={handleSave}
         />
       )}

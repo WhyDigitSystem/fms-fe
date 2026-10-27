@@ -17,13 +17,10 @@ import { bestTotal, formatMoney } from "./quotationUtils";
 import { downloadQuotationPdf } from "./quotationPdf";
 
 const statusStyles = {
-  Draft:
-    "bg-slate-100 text-slate-600 ring-slate-500/20 dark:bg-gray-700/50 dark:text-gray-300 dark:ring-gray-500/30",
+  Draft: "bg-slate-100 text-slate-600 ring-slate-500/20 dark:bg-gray-700/50 dark:text-gray-300 dark:ring-gray-500/30",
   Sent: "bg-blue-50 text-blue-700 ring-blue-600/20 dark:bg-blue-500/10 dark:text-blue-300 dark:ring-blue-400/20",
-  Accepted:
-    "bg-emerald-50 text-emerald-700 ring-emerald-600/20 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-400/20",
-  Expired:
-    "bg-red-50 text-red-700 ring-red-600/20 dark:bg-red-500/10 dark:text-red-300 dark:ring-red-400/20",
+  Accepted: "bg-emerald-50 text-emerald-700 ring-emerald-600/20 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-400/20",
+  Expired: "bg-red-50 text-red-700 ring-red-600/20 dark:bg-red-500/10 dark:text-red-300 dark:ring-red-400/20",
 };
 
 const statusDots = {
@@ -63,7 +60,6 @@ const SelectBox = ({ value, onChange, options, label, className = "" }) => (
         </option>
       ))}
     </select>
-
     <ChevronDown
       size={13}
       className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400"
@@ -71,7 +67,7 @@ const SelectBox = ({ value, onChange, options, label, className = "" }) => (
   </div>
 );
 
-const QuotationList = ({ quotations = [], onAddNew, onEdit, onBack }) => {
+const QuotationList = ({ quotations = [], loading = false, onAddNew, onEdit, onBack }) => {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [currentPage, setCurrentPage] = useState(1);
@@ -81,17 +77,20 @@ const QuotationList = ({ quotations = [], onAddNew, onEdit, onBack }) => {
     const term = search.trim().toLowerCase();
 
     return quotations.filter((item) => {
+      // ✅ Safely extract customer name from the array
+      const customerName = item.customerInformation?.[0]?.customerName || "";
+
       const matchesSearch = [
-        item.quotationNo,
-        item.quotationDate,
+        item.quotationNo || item.docId,
+        item.quotationDate || item.docDate,
         item.expirationDate,
-        item.customerName,
-        item.company,
+        customerName,
+        item.company || item.companyName,
         item.originCode,
         item.originCity,
         item.destinationCode,
         item.destinationCity,
-        item.service,
+        item.service || item.serviceType,
         item.incoterm,
         item.status,
       ].some((value) =>
@@ -155,18 +154,15 @@ const QuotationList = ({ quotations = [], onAddNew, onEdit, onBack }) => {
             >
               <ArrowLeft size={15} />
             </button>
-
             <div>
               <div className="flex flex-wrap items-center gap-2">
                 <h1 className="text-base font-bold leading-tight text-slate-900 dark:text-white sm:text-lg">
                   Quotation Management
                 </h1>
-
                 <span className="rounded-md bg-blue-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-blue-700 dark:bg-blue-500/10 dark:text-blue-300">
                   Sales
                 </span>
               </div>
-
               <p className="mt-0.5 text-[10px] text-slate-500 dark:text-gray-400">
                 Prepare airfreight quotations with origin charges, airline rates
                 and commercial terms.
@@ -198,7 +194,6 @@ const QuotationList = ({ quotations = [], onAddNew, onEdit, onBack }) => {
                   {value}
                 </p>
               </div>
-
               <div
                 className={`flex h-8 w-8 items-center justify-center rounded-md ${color}`}
               >
@@ -218,7 +213,6 @@ const QuotationList = ({ quotations = [], onAddNew, onEdit, onBack }) => {
                 View and manage all customer quotations.
               </p>
             </div>
-
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <div className="relative min-w-0 sm:w-64">
                 <Search
@@ -233,7 +227,6 @@ const QuotationList = ({ quotations = [], onAddNew, onEdit, onBack }) => {
                   className={`${controlClass} w-full pl-8`}
                 />
               </div>
-
               <SelectBox
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
@@ -265,114 +258,106 @@ const QuotationList = ({ quotations = [], onAddNew, onEdit, onBack }) => {
               </thead>
 
               <tbody className="divide-y divide-slate-100 dark:divide-gray-700/50">
-                {currentItems.map((item) => {
-                  const status = item.status || "Draft";
+                {loading ? (
+                  <tr>
+                    <td colSpan={headings.length} className="px-3 py-10 text-center text-gray-500">
+                      Loading...
+                    </td>
+                  </tr>
+                ) : (
+                  currentItems.map((item) => {
+                    const status = item.status || "Draft";
+                    // ✅ Safely extract customer name
+                    const customerName = item.customerInformation?.[0]?.customerName || "-";
 
-                  return (
-                    <tr
-                      key={item.id ?? item.quotationNo}
-                      className="transition hover:bg-slate-50/80 dark:hover:bg-gray-800/60"
-                    >
-                      <td className="whitespace-nowrap px-3 py-2 align-middle">
-                        <span className="font-semibold text-blue-700 dark:text-blue-400">
-                          {item.quotationNo || "-"}
-                        </span>
-                      </td>
-
-                      <td className="whitespace-nowrap px-3 py-2 align-middle text-slate-600 dark:text-gray-300">
-                        {item.quotationDate || "-"}
-                      </td>
-
-                      <td className="whitespace-nowrap px-3 py-2 align-middle text-slate-600 dark:text-gray-300">
-                        {item.expirationDate || "-"}
-                      </td>
-
-                      <td className="max-w-[200px] px-3 py-2 align-middle">
-                        <p
-                          className="truncate font-semibold text-slate-800 dark:text-gray-100"
-                          title={item.customerName || ""}
-                        >
-                          {item.customerName || "-"}
-                        </p>
-                        <p className="mt-0.5 truncate text-[10px] text-slate-500 dark:text-gray-400">
-                          {item.company || "-"}
-                        </p>
-                      </td>
-
-                      <td className="max-w-[220px] px-3 py-2 align-middle">
-                        <p className="flex items-center gap-1 font-medium text-slate-700 dark:text-gray-100">
-                          <MapPin
-                            size={11}
-                            className="shrink-0 text-slate-400"
-                          />
-                          <span className="truncate">
-                            {item.originCode || "-"} →{" "}
-                            {item.destinationCode || "-"}
+                    return (
+                      <tr
+                        key={item.id ?? item.quotationNo}
+                        className="transition hover:bg-slate-50/80 dark:hover:bg-gray-800/60"
+                      >
+                        <td className="whitespace-nowrap px-3 py-2 align-middle">
+                          <span className="font-semibold text-blue-700 dark:text-blue-400">
+                            {item.quotationNo || item.docId || "-"}
                           </span>
-                        </p>
-                        <p className="mt-0.5 truncate text-[10px] text-slate-500 dark:text-gray-400">
-                          {item.originCity || "-"} to{" "}
-                          {item.destinationCity || "-"}
-                        </p>
-                      </td>
-
-                      <td className="whitespace-nowrap px-3 py-2 align-middle text-slate-600 dark:text-gray-300">
-                        {item.service || "-"}
-                      </td>
-
-                      <td className="whitespace-nowrap px-3 py-2 align-middle">
-                        <span className="rounded-md border border-slate-200 px-1.5 py-1 font-medium text-slate-600 dark:border-gray-700 dark:bg-gray-900/50 dark:text-gray-300">
-                          {item.incoterm || "-"}
-                        </span>
-                      </td>
-
-                      <td className="whitespace-nowrap px-3 py-2 text-right align-middle font-semibold text-slate-800 dark:text-gray-100">
-                        {formatMoney(bestTotal(item), item.currency || "INR")}
-                      </td>
-
-                      <td className="whitespace-nowrap px-3 py-2 align-middle">
-                        <span
-                          className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ring-inset ${
-                            statusStyles[status] || statusStyles.Draft
-                          }`}
-                        >
+                        </td>
+                        <td className="whitespace-nowrap px-3 py-2 align-middle text-slate-600 dark:text-gray-300">
+                          {item.quotationDate || item.docDate || "-"}
+                        </td>
+                        <td className="whitespace-nowrap px-3 py-2 align-middle text-slate-600 dark:text-gray-300">
+                          {item.expirationDate || "-"}
+                        </td>
+                        <td className="max-w-[200px] px-3 py-2 align-middle">
+                          {/* ✅ Render the safe customer name */}
+                          <p
+                            className="truncate font-semibold text-slate-800 dark:text-gray-100"
+                            title={customerName}
+                          >
+                            {customerName}
+                          </p>
+                          <p className="mt-0.5 truncate text-[10px] text-slate-500 dark:text-gray-400">
+                            {item.company || item.companyName || "-"}
+                          </p>
+                        </td>
+                        <td className="max-w-[220px] px-3 py-2 align-middle">
+                          <p className="flex items-center gap-1 font-medium text-slate-700 dark:text-gray-100">
+                            <MapPin size={11} className="shrink-0 text-slate-400" />
+                            <span className="truncate">
+                              {item.originCode || "-"} → {item.destinationCode || "-"}
+                            </span>
+                          </p>
+                          <p className="mt-0.5 truncate text-[10px] text-slate-500 dark:text-gray-400">
+                            {item.originCity || "-"} to {item.destinationCity || "-"}
+                          </p>
+                        </td>
+                        <td className="whitespace-nowrap px-3 py-2 align-middle text-slate-600 dark:text-gray-300">
+                          {item.service || item.serviceType || "-"}
+                        </td>
+                        <td className="whitespace-nowrap px-3 py-2 align-middle">
+                          <span className="rounded-md border border-slate-200 px-1.5 py-1 font-medium text-slate-600 dark:border-gray-700 dark:bg-gray-900/50 dark:text-gray-300">
+                            {item.incoterm || "-"}
+                          </span>
+                        </td>
+                        <td className="whitespace-nowrap px-3 py-2 text-right align-middle font-semibold text-slate-800 dark:text-gray-100">
+                          {formatMoney(bestTotal(item))}
+                        </td>
+                        <td className="whitespace-nowrap px-3 py-2 align-middle">
                           <span
-                            className={`h-1.5 w-1.5 rounded-full ${
-                              statusDots[status] || statusDots.Draft
-                            }`}
-                          />
-                          {status}
-                        </span>
-                      </td>
-
-                      <td className="px-3 py-2 align-middle">
-                        <div className="flex justify-center gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => downloadQuotationPdf(item)}
-                            className="flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 text-slate-500 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 dark:border-gray-700 dark:text-gray-300 dark:hover:border-blue-500/40 dark:hover:bg-blue-500/10 dark:hover:text-blue-300"
-                            title="Download PDF"
-                            aria-label={`Download PDF ${item.quotationNo || ""}`}
+                            className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ring-inset ${statusStyles[status] || statusStyles.Draft
+                              }`}
                           >
-                            <Download size={13} />
-                          </button>
+                            <span
+                              className={`h-1.5 w-1.5 rounded-full ${statusDots[status] || statusDots.Draft
+                                }`}
+                            />
+                            {status}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 align-middle">
+                          <div className="flex justify-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => downloadQuotationPdf(item)}
+                              className="flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 text-slate-500 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 dark:border-gray-700 dark:text-gray-300 dark:hover:border-blue-500/40 dark:hover:bg-blue-500/10 dark:hover:text-blue-300"
+                              title="Download PDF"
+                            >
+                              <Download size={13} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => onEdit?.(item)}
+                              className="flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 text-slate-500 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 dark:border-gray-700 dark:text-gray-300 dark:hover:border-blue-500/40 dark:hover:bg-blue-500/10 dark:hover:text-blue-300"
+                              title="Edit quotation"
+                            >
+                              <Pencil size={13} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
 
-                          <button
-                            type="button"
-                            onClick={() => onEdit?.(item)}
-                            className="flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 text-slate-500 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 dark:border-gray-700 dark:text-gray-300 dark:hover:border-blue-500/40 dark:hover:bg-blue-500/10 dark:hover:text-blue-300"
-                            title="Edit quotation"
-                            aria-label={`Edit quotation ${item.quotationNo || ""}`}
-                          >
-                            <Pencil size={13} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-
-                {currentItems.length === 0 && (
+                {!loading && currentItems.length === 0 && (
                   <tr>
                     <td colSpan={headings.length} className="px-3 py-10">
                       <div className="flex flex-col items-center text-center">
@@ -400,7 +385,6 @@ const QuotationList = ({ quotations = [], onAddNew, onEdit, onBack }) => {
                 {Math.min(startIndex + pageSize, filtered.length)} of{" "}
                 {filtered.length}
               </span>
-
               <SelectBox
                 value={String(pageSize)}
                 onChange={(e) => setPageSize(Number(e.target.value))}
@@ -418,23 +402,19 @@ const QuotationList = ({ quotations = [], onAddNew, onEdit, onBack }) => {
                 type="button"
                 onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
                 disabled={currentPage === 1}
-                aria-label="Previous page"
                 className="flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
               >
                 <ChevronLeft size={14} />
               </button>
-
               <span className="min-w-24 text-center text-[11px] text-slate-600 dark:text-gray-300">
                 Page {currentPage} of {totalPages}
               </span>
-
               <button
                 type="button"
                 onClick={() =>
                   setCurrentPage((page) => Math.min(totalPages, page + 1))
                 }
                 disabled={currentPage === totalPages}
-                aria-label="Next page"
                 className="flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
               >
                 <ChevronRight size={14} />
