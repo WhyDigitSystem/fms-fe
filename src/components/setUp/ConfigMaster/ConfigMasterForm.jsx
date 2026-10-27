@@ -136,13 +136,13 @@ const ActiveToggle = ({ value, onChange }) => (
     type="button"
     onClick={() => onChange(!value)}
     aria-pressed={Boolean(value)}
-    className={`flex h-7 w-full items-center justify-center gap-1 rounded-md border px-1.5 text-[10px] font-semibold transition ${
+    className={`flex h-8 w-20 items-center justify-center gap-1.5 rounded-md border px-2 text-[11px] font-semibold transition ${
       value
         ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300"
         : "border-slate-200 bg-slate-50 text-slate-500 hover:bg-slate-100 dark:border-gray-700 dark:bg-gray-900"
     }`}
   >
-    {value ? <Check size={10} /> : <X size={10} />}
+    {value ? <Check size={12} /> : <X size={12} />}
     {value ? "Active" : "Inactive"}
   </button>
 );
@@ -206,7 +206,7 @@ const ModeOptionButtons = ({ selectedModes, options, onToggle, disabled }) => (
           onClick={() => onToggle(item)}
           aria-pressed={selected}
           title={label}
-          className={`inline-flex h-6 max-w-full min-w-0 items-center gap-0.5 rounded border px-1.5 text-[9px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+          className={`inline-flex h-8 max-w-full min-w-0 items-center rounded-md border px-2 text-[11px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
             selected
               ? "border-green-300 bg-green-50 text-green-700 dark:border-green-500/50 dark:bg-green-500/10 dark:text-green-400"
               : "border-slate-200 bg-white text-slate-600 hover:border-green-300 hover:bg-green-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300"
@@ -287,6 +287,16 @@ const ConfigChildTable = ({
         ? optionsLoading.services
         : optionsLoading.products;
 
+  // Get IDs selected in other rows, excluding the current row.
+  const getAvailableOptions = (currentIndex) => {
+    const selectedIds = rows
+      .filter((_, index) => index !== currentIndex)
+      .map((row) => String(row[type] ?? ""))
+      .filter(Boolean);
+
+    return itemOptions.filter((item) => !selectedIds.includes(String(item.id)));
+  };
+
   return (
     <Section
       icon={Icon}
@@ -315,7 +325,7 @@ const ConfigChildTable = ({
                 <SelectField
                   value={row[type]}
                   onChange={(value) => onChange(index, type, value)}
-                  options={itemOptions}
+                  options={getAvailableOptions(index)}
                   type={type}
                   placeholder={`Select ${
                     type === "service" ? "Service" : "Product"
@@ -795,7 +805,7 @@ const ConfigForm = ({ onBack, onSave, data }) => {
           <div className="grid grid-cols-1 items-stretch gap-2.5 md:grid-cols-2">
             <Section icon={Building2} title="Company">
               <div className="grid grid-cols-1 items-end gap-3 sm:grid-cols-[minmax(0,380px)_100px]">
-                <Field label="Company Name" required error={errors.company}>
+                <Field required error={errors.company}>
                   <input
                     value={header.company}
                     onChange={(event) => {
