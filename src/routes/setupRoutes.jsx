@@ -1,5 +1,5 @@
+import ConfigMaster from "../components/setUp/ConfigMaster/ConfigMaster";
 import Setup from "../components/setUp/Setup";
-import Configuration from "../components/setUp/Configuration/Configuration";
 
 const setupRoutes = [
   {
@@ -8,7 +8,7 @@ const setupRoutes = [
   },
   {
     path: "configuration",
-    element: <Configuration />,
+    element: <ConfigMaster />,
   },
 ];
 

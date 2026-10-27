@@ -19,6 +19,8 @@ import DepartmentMasterPage from "../components/masters/Department/DepartmentMas
 import DesignationMasterPage from "../components/masters/Designation/DesignationMaster";
 import ServiceMaster from "../components/masters/service/ServiceMaster";
 import ProductMaster from "../components/masters/product/ProductMaster";
+import PortMaster from "../components/masters/PortMaster/PortMaster";
+import ModeMaster from "../components/masters/ModeMaster/ModeMaster";
 
 const masterRoutes = [
   {
@@ -92,6 +94,14 @@ const masterRoutes = [
   {
     path: "product",
     element: <ProductMaster />,
+  },
+  {
+    path: "port",
+    element: <PortMaster />,
+  },
+  {
+    path: "mode",
+    element: <ModeMaster />,
   },
 ];
 

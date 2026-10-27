@@ -30,6 +30,8 @@ import {
   FileCheck,
   Package,
   Wrench,
+  Truck,
+  Anchor,
 } from "lucide-react";
 
 import { useNavigate } from "react-router-dom";
@@ -156,6 +158,20 @@ const MASTERS = [
     path: "/service",
     color: "teal",
     screenCode: "SERV",
+  },
+  {
+    name: "Port",
+    icon: Anchor,
+    path: "/port",
+    color: "cyan",
+    screenCode: "PORT",
+  },
+  {
+    name: "Mode",
+    icon: Truck,
+    path: "/mode",
+    color: "orange",
+    screenCode: "MODE",
   },
 ];
 

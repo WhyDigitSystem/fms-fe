@@ -317,39 +317,6 @@ const Header = () => {
                     </div>
                   </div>
 
-                  {/* Organization details */}
-                  {(loginBranch ||
-                    loginCustomer ||
-                    loginClient ||
-                    loginWarehouse ||
-                    loginFinYear ||
-                    loginBranchId ||
-                    localStorage.getItem("orgId")) && (
-                    <div className="px-3 py-2 border-b border-gray-100 dark:border-gray-800 space-y-1">
-                      {[
-                        ["Branch", loginBranch],
-                        ["Customer", loginCustomer],
-                        ["Client", loginClient],
-                        ["Warehouse", loginWarehouse],
-                        ["Financial Year", loginFinYear],
-                      ]
-                        .filter(([, value]) => value)
-                        .map(([label, value]) => (
-                          <div
-                            key={label}
-                            className="flex items-center justify-between gap-2 text-[11px]"
-                          >
-                            <span className="text-gray-500 dark:text-gray-400">
-                              {label}
-                            </span>
-                            <span className="text-gray-700 dark:text-gray-200 font-medium truncate max-w-32">
-                              {value}
-                            </span>
-                          </div>
-                        ))}
-                    </div>
-                  )}
-
                   <div className="p-1.5">
                     <button
                       onClick={() => {
