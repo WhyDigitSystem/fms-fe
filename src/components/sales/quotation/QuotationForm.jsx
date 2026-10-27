@@ -131,7 +131,17 @@ const serviceTypes = [
   "Airport to Airport",
   "Airport to Door",
 ];
-const incoterms = ["EXW", "FCA", "FOB", "CIF", "CIP", "CPT", "DAP", "DDP", "DPU"];
+const incoterms = [
+  "EXW",
+  "FCA",
+  "FOB",
+  "CIF",
+  "CIP",
+  "CPT",
+  "DAP",
+  "DDP",
+  "DPU",
+];
 const statuses = ["Draft", "Sent", "Accepted", "Expired"];
 const rateUnits = [
   "Shipment",
@@ -224,8 +234,9 @@ const TextField = ({
       aria-invalid={!!error}
       aria-required={required || undefined}
       onChange={(e) => onChange?.(e.target.value)}
-      className={`${inputClass} ${error ? "!border-rose-500 focus:!ring-rose-500/10" : ""
-        }`}
+      className={`${inputClass} ${
+        error ? "!border-rose-500 focus:!ring-rose-500/10" : ""
+      }`}
       {...rest}
     />
   </Field>
@@ -250,8 +261,9 @@ const SelectField = ({
         aria-invalid={!!error}
         aria-required={required || undefined}
         onChange={(e) => onChange(e.target.value)}
-        className={`${inputClass} appearance-none pr-7 ${error ? "!border-rose-500 focus:!ring-rose-500/10" : ""
-          }`}
+        className={`${inputClass} appearance-none pr-7 ${
+          error ? "!border-rose-500 focus:!ring-rose-500/10" : ""
+        }`}
       >
         <option value="">{placeholder}</option>
         {options.map((option) => {
@@ -355,10 +367,11 @@ const Stat = ({ label, value, strong }) => (
   <div className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 dark:border-gray-700 dark:bg-gray-900/50">
     <p className="text-[10px] text-slate-500 dark:text-gray-400">{label}</p>
     <p
-      className={`mt-0.5 text-[12px] ${strong
-        ? "font-bold text-blue-700 dark:text-blue-300"
-        : "font-semibold text-slate-800 dark:text-gray-100"
-        }`}
+      className={`mt-0.5 text-[12px] ${
+        strong
+          ? "font-bold text-blue-700 dark:text-blue-300"
+          : "font-semibold text-slate-800 dark:text-gray-100"
+      }`}
     >
       {value}
     </p>
@@ -385,7 +398,7 @@ const StepHeader = ({ step, title, subtitle }) => (
 /* Screen                                                              */
 /* ------------------------------------------------------------------ */
 
-const QuotationForm = ({ onBack = () => { }, onSave, editData }) => {
+const QuotationForm = ({ onBack = () => {}, onSave, editData }) => {
   const [step, setStep] = useState(1);
   const [form, setForm] = useState(() => ({
     ...initialForm,
@@ -417,7 +430,9 @@ const QuotationForm = ({ onBack = () => { }, onSave, editData }) => {
   const { summary, originTotal, airlines } = totals;
 
   const cur = useMemo(() => {
-    const found = currencyList.find((c) => String(c.id) === String(form.currency));
+    const found = currencyList.find(
+      (c) => String(c.id) === String(form.currency),
+    );
     return found ? found.currency : "INR";
   }, [currencyList, form.currency]);
 
@@ -476,53 +491,66 @@ const QuotationForm = ({ onBack = () => { }, onSave, editData }) => {
         agentEmail: ci.agentEmail || "",
         packages: record.shippingDetails?.length
           ? record.shippingDetails.map((p) => ({
-            id: p.id || nextUid(),
-            quantity: p.quantity != null ? String(p.quantity) : "",
-            weight: p.packageWeight != null ? String(p.packageWeight) : "",
-            weightUnit: p.weightUnit || "kg",
-            length: p.length != null ? String(p.length) : "",
-            width: p.width != null ? String(p.width) : "",
-            height: p.height != null ? String(p.height) : "",
-            dimensionUnit: p.dimensionUnit || "cm",
-            cargoType: p.cargoType || "",
-            cargoDescription: p.cargoDescription || "",
-          }))
+              id: p.id || nextUid(),
+              quantity: p.quantity != null ? String(p.quantity) : "",
+              weight: p.packageWeight != null ? String(p.packageWeight) : "",
+              weightUnit: p.weightUnit || "kg",
+              length: p.length != null ? String(p.length) : "",
+              width: p.width != null ? String(p.width) : "",
+              height: p.height != null ? String(p.height) : "",
+              dimensionUnit: p.dimensionUnit || "cm",
+              cargoType: p.cargoType || "",
+              cargoDescription: p.cargoDescription || "",
+            }))
           : [emptyPackage()],
         originCharges: record.originCharges?.length
           ? record.originCharges.map((c) => ({
-            id: c.id || nextUid(),
-            description: c.chargeDescription || "",
-            rate: c.rate != null ? String(c.rate) : "",
-            rateUnit: c.rateUnit || "Shipment",
-            minimumCharge: c.minimumCharge != null ? String(c.minimumCharge) : "",
-            quantity: c.quantityUnits != null ? String(c.quantityUnits) : "1",
-            basis: c.chargeableBasis || "",
-            notes: c.chargeNotes || "",
-          }))
+              id: c.id || nextUid(),
+              description: c.chargeDescription || "",
+              rate: c.rate != null ? String(c.rate) : "",
+              rateUnit: c.rateUnit || "Shipment",
+              minimumCharge:
+                c.minimumCharge != null ? String(c.minimumCharge) : "",
+              quantity: c.quantityUnits != null ? String(c.quantityUnits) : "1",
+              basis: c.chargeableBasis || "",
+              notes: c.chargeNotes || "",
+            }))
           : [],
         airRates: record.airFreightRates?.length
           ? record.airFreightRates.map((a) => ({
-            id: a.id || nextUid(),
-            airlineName: a.airlineName || "",
-            airlineCode: a.airlineCode || "",
-            productName: a.productName || "",
-            destinationCode: a.destinationCode || "",
-            transitVia: a.transitVia || "",
-            rateType: a.freightRateType || "",
-            minimumWeight: a.minimumWeight != null ? String(a.minimumWeight) : "",
-            ratePerKg: a.ratePerKg != null ? String(a.ratePerKg) : "",
-            fuelRate: a.fuelRate != null ? String(a.fuelRate) : "",
-            riskRate: a.riskRate != null ? String(a.riskRate) : "",
-            remarks: a.rateRemarks || "",
-          }))
+              id: a.id || nextUid(),
+              airlineName: a.airlineName || "",
+              airlineCode: a.airlineCode || "",
+              productName: a.productName || "",
+              destinationCode: a.destinationCode || "",
+              transitVia: a.transitVia || "",
+              rateType: a.freightRateType || "",
+              minimumWeight:
+                a.minimumWeight != null ? String(a.minimumWeight) : "",
+              ratePerKg: a.ratePerKg != null ? String(a.ratePerKg) : "",
+              fuelRate: a.fuelRate != null ? String(a.fuelRate) : "",
+              riskRate: a.riskRate != null ? String(a.riskRate) : "",
+              remarks: a.rateRemarks || "",
+            }))
           : [emptyAirRate()],
-        insurancePercentage: ct.insurancePercentage != null ? String(ct.insurancePercentage) : "",
+        insurancePercentage:
+          ct.insurancePercentage != null ? String(ct.insurancePercentage) : "",
         cargoValue: ct.cargoValue != null ? String(ct.cargoValue) : "",
-        profitSharingPercentage: ct.profitSharingPercentage != null ? String(ct.profitSharingPercentage) : "",
-        bankExchangePercentage: ct.bankExchangePercentage != null ? String(ct.bankExchangePercentage) : "",
-        freeStorageDays: ct.freeStorageDays != null ? String(ct.freeStorageDays) : "",
+        profitSharingPercentage:
+          ct.profitSharingPercentage != null
+            ? String(ct.profitSharingPercentage)
+            : "",
+        bankExchangePercentage:
+          ct.bankExchangePercentage != null
+            ? String(ct.bankExchangePercentage)
+            : "",
+        freeStorageDays:
+          ct.freeStorageDays != null ? String(ct.freeStorageDays) : "",
         storageRate: ct.storageRate != null ? String(ct.storageRate) : "",
-        storageMinimumCharge: ct.storageMinimumCharge != null ? String(ct.storageMinimumCharge) : "",
+        storageMinimumCharge:
+          ct.storageMinimumCharge != null
+            ? String(ct.storageMinimumCharge)
+            : "",
         rateValidityRemarks: ct.rateValidityRemarks || "",
         terms: ct.termsAndConditions || "",
         remarks: ct.generalRemarks || record.remarks || "",
@@ -610,8 +638,7 @@ const QuotationForm = ({ onBack = () => { }, onSave, editData }) => {
     }
 
     if (form.originCode.length > 5) e.originCode = "Max 5 characters";
-    if (form.destinationCode.length > 5)
-      e.destinationCode = "Max 5 characters";
+    if (form.destinationCode.length > 5) e.destinationCode = "Max 5 characters";
 
     const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (form.customerEmail && !emailRe.test(form.customerEmail))
@@ -623,8 +650,11 @@ const QuotationForm = ({ onBack = () => { }, onSave, editData }) => {
       const v = form[name];
       if (v !== "" && (num(v) < 0 || num(v) > 100)) e[name] = "0 – 100";
     };
-    ["insurancePercentage", "profitSharingPercentage", "bankExchangePercentage"]
-      .forEach(pct);
+    [
+      "insurancePercentage",
+      "profitSharingPercentage",
+      "bankExchangePercentage",
+    ].forEach(pct);
 
     const badPkg = form.packages.some(
       (p) =>
@@ -666,20 +696,21 @@ const QuotationForm = ({ onBack = () => { }, onSave, editData }) => {
 
   const goNext = () => {
     if (!validate()) {
-      const stepErrors = {
-        1: [
-          "quotationDate",
-          "expirationDate",
-          "company",
-          "service",
-          "currency",
-          "paymentTerms",
-          "incoterm",
-          "customerName",
-        ],
-        2: ["originCode", "originCity", "destinationCode", "destinationCity"],
-        3: [],
-      }[step] || [];
+      const stepErrors =
+        {
+          1: [
+            "quotationDate",
+            "expirationDate",
+            "company",
+            "service",
+            "currency",
+            "paymentTerms",
+            "incoterm",
+            "customerName",
+          ],
+          2: ["originCode", "originCity", "destinationCode", "destinationCity"],
+          3: [],
+        }[step] || [];
       if (stepErrors.some((f) => errors[f])) return;
     }
     setErrors({});
@@ -989,16 +1020,19 @@ const QuotationForm = ({ onBack = () => { }, onSave, editData }) => {
                   onClick={() => goToStep(stepNo)}
                   disabled={!clickable}
                   aria-current={step === stepNo ? "step" : undefined}
-                  className={`text-left ${clickable ? "cursor-pointer" : "cursor-default"
-                    }`}
+                  className={`text-left ${
+                    clickable ? "cursor-pointer" : "cursor-default"
+                  }`}
                 >
                   <div
-                    className={`h-1 rounded-full transition ${step >= stepNo ? "bg-blue-400" : "bg-white/20"
-                      }`}
+                    className={`h-1 rounded-full transition ${
+                      step >= stepNo ? "bg-blue-400" : "bg-white/20"
+                    }`}
                   />
                   <p
-                    className={`mt-1 truncate text-[9px] ${step >= stepNo ? "text-white" : "text-slate-400"
-                      }`}
+                    className={`mt-1 truncate text-[9px] ${
+                      step >= stepNo ? "text-white" : "text-slate-400"
+                    }`}
                   >
                     {title}
                   </p>
@@ -1013,12 +1047,6 @@ const QuotationForm = ({ onBack = () => { }, onSave, editData }) => {
           {/* STEP 1: Quotation & Customer */}
           {step === 1 && (
             <div className="space-y-2">
-              <StepHeader
-                step={1}
-                title="Quotation & customer"
-                subtitle="Enter quote header details, route basics and customer info."
-              />
-
               <Section
                 icon={FileText}
                 title="Quotation information"
@@ -1028,9 +1056,7 @@ const QuotationForm = ({ onBack = () => { }, onSave, editData }) => {
                   <TextField
                     label="Quotation No"
                     value={form.quotationNo}
-                    placeholder={
-                      loadingDocId ? "Loading..." : "Auto-generated"
-                    }
+                    placeholder={loadingDocId ? "Loading..." : "Auto-generated"}
                     disabled
                     error={errors.quotationNo}
                   />
@@ -1119,9 +1145,7 @@ const QuotationForm = ({ onBack = () => { }, onSave, editData }) => {
                       required
                       maxLength={5}
                       value={form.originCode}
-                      onChange={(v) =>
-                        setField("originCode", v.toUpperCase())
-                      }
+                      onChange={(v) => setField("originCode", v.toUpperCase())}
                       placeholder="BCN"
                       error={errors.originCode}
                     />
@@ -1221,12 +1245,6 @@ const QuotationForm = ({ onBack = () => { }, onSave, editData }) => {
           {/* STEP 2: Route & Shipment (packages) */}
           {step === 2 && (
             <div className="space-y-2">
-              <StepHeader
-                step={2}
-                title="Shipment & packages"
-                subtitle="Add dimension lines. Volumetric weight uses 1 CBM = 167 KG."
-              />
-
               <Section
                 icon={Package}
                 title="Shipment details"
@@ -1399,12 +1417,6 @@ const QuotationForm = ({ onBack = () => { }, onSave, editData }) => {
           {/* STEP 3: Charges & Terms */}
           {step === 3 && (
             <div className="space-y-2">
-              <StepHeader
-                step={3}
-                title="Charges, rates & terms"
-                subtitle="Origin charges, airfreight rates, totals and commercial terms."
-              />
-
               <Section
                 icon={Receipt}
                 title={`Charges in ${form.originCity || "Origin"}`}
@@ -1528,9 +1540,7 @@ const QuotationForm = ({ onBack = () => { }, onSave, editData }) => {
                             </td>
                             <td className="px-1 py-1 text-center">
                               <RemoveRowButton
-                                onClick={() =>
-                                  removeRow("originCharges", c.id)
-                                }
+                                onClick={() => removeRow("originCharges", c.id)}
                               />
                             </td>
                           </tr>
@@ -1566,7 +1576,9 @@ const QuotationForm = ({ onBack = () => { }, onSave, editData }) => {
                 title="Airfreight rates"
                 subtitle="Freight = rate × chargeable weight. Surcharges = (fuel + risk) × chargeable weight."
                 action={
-                  <AddRowButton onClick={() => addRow("airRates", emptyAirRate)}>
+                  <AddRowButton
+                    onClick={() => addRow("airRates", emptyAirRate)}
+                  >
                     Add Airline
                   </AddRowButton>
                 }
