@@ -33,7 +33,6 @@ const emptyChild = () => ({
   mode: "",
   service: "",
   product: "",
-  active: true,
 });
 
 const emptyHeader = () => ({
@@ -76,9 +75,7 @@ const getOptionLabel = (item, type) => {
 };
 
 const getModeValue = (item) => {
-  if (typeof item?.mode === "string") {
-    return item.mode;
-  }
+  if (typeof item?.mode === "string") return item.mode;
 
   if (item?.mode && typeof item.mode === "object") {
     return item.mode.modeName ?? item.mode.mode ?? item.mode.description ?? "";
@@ -93,25 +90,19 @@ const isActive = (item) =>
   item?.active === 1 ||
   item?.active === "Active";
 
-const Section = ({ icon: Icon, title, subtitle, action, children }) => (
+/* -------------------- Section -------------------- */
+
+const Section = ({ icon: Icon, title, action, children }) => (
   <section className="min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm dark:border-gray-700/60 dark:bg-gray-800/40">
-    <div className="flex min-h-[44px] items-center justify-between gap-2 border-b border-slate-100 px-3 py-2 dark:border-gray-700/60">
+    <div className="flex min-h-[42px] items-center justify-between gap-2 border-b border-slate-100 px-3 py-2 dark:border-gray-700/60">
       <div className="flex min-w-0 items-center gap-2">
         <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400">
           <Icon size={14} />
         </span>
 
-        <div className="min-w-0">
-          <h3 className="text-[12px] font-semibold text-slate-900 dark:text-white">
-            {title}
-          </h3>
-
-          {subtitle && (
-            <p className="text-[10px] text-slate-500 dark:text-gray-400">
-              {subtitle}
-            </p>
-          )}
-        </div>
+        <h3 className="truncate text-[12px] font-semibold text-slate-900 dark:text-white">
+          {title}
+        </h3>
       </div>
 
       {action}
@@ -121,18 +112,42 @@ const Section = ({ icon: Icon, title, subtitle, action, children }) => (
   </section>
 );
 
+/* -------------------- Field -------------------- */
+
 const Field = ({ label, required, children, error }) => (
   <div className="min-w-0">
-    <label className="mb-1 block text-[11px] font-medium text-slate-600 dark:text-gray-300">
-      {label}
-      {required && <span className="ml-0.5 text-red-500">*</span>}
-    </label>
+    {label && (
+      <label className="mb-1 block text-[11px] font-medium text-slate-600 dark:text-gray-300">
+        {label}
+        {required && <span className="ml-0.5 text-red-500">*</span>}
+      </label>
+    )}
 
     {children}
 
     {error && <p className="mt-1 text-[10px] text-red-500">{error}</p>}
   </div>
 );
+
+/* -------------------- Header Active Toggle -------------------- */
+
+const ActiveToggle = ({ value, onChange }) => (
+  <button
+    type="button"
+    onClick={() => onChange(!value)}
+    aria-pressed={Boolean(value)}
+    className={`flex h-7 w-full items-center justify-center gap-1 rounded-md border px-1.5 text-[10px] font-semibold transition ${
+      value
+        ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300"
+        : "border-slate-200 bg-slate-50 text-slate-500 hover:bg-slate-100 dark:border-gray-700 dark:bg-gray-900"
+    }`}
+  >
+    {value ? <Check size={10} /> : <X size={10} />}
+    {value ? "Active" : "Inactive"}
+  </button>
+);
+
+/* -------------------- Select Field -------------------- */
 
 const SelectField = ({
   value,
@@ -142,7 +157,7 @@ const SelectField = ({
   placeholder,
   disabled,
 }) => (
-  <div className="relative min-w-0">
+  <div className="relative min-w-0 w-full">
     <select
       value={value ?? ""}
       onChange={(event) => onChange(event.target.value)}
@@ -153,7 +168,7 @@ const SelectField = ({
 
       {options.map((item) => {
         const label = getOptionLabel(item, type);
-        const optionValue = type === "mode" ? label : String(item.id ?? "");
+        const optionValue = String(item.id ?? "");
 
         if (!label || !optionValue) return null;
 
@@ -172,16 +187,64 @@ const SelectField = ({
   </div>
 );
 
+/* -------------------- Multi-Select Mode Buttons -------------------- */
+
+const ModeOptionButtons = ({ selectedModes, options, onToggle, disabled }) => (
+  <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+    {options.map((item) => {
+      const label = getOptionLabel(item, "mode");
+
+      if (!label) return null;
+
+      const selected = selectedModes.some((mode) => mode.mode === label);
+
+      return (
+        <button
+          key={`mode-${item.id ?? label}`}
+          type="button"
+          disabled={disabled}
+          onClick={() => onToggle(item)}
+          aria-pressed={selected}
+          title={label}
+          className={`inline-flex h-6 max-w-full min-w-0 items-center gap-0.5 rounded border px-1.5 text-[9px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+            selected
+              ? "border-green-300 bg-green-50 text-green-700 dark:border-green-500/50 dark:bg-green-500/10 dark:text-green-400"
+              : "border-slate-200 bg-white text-slate-600 hover:border-green-300 hover:bg-green-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300"
+          }`}
+        >
+          <span className="truncate">{label}</span>
+        </button>
+      );
+    })}
+
+    {options.length === 0 && (
+      <p className="text-[10px] text-slate-400">
+        {disabled ? "Loading modes..." : "No modes available"}
+      </p>
+    )}
+
+    {selectedModes.length > 0 && (
+      <span className="ml-1 text-[10px] text-slate-500 dark:text-gray-400">
+        {selectedModes.length} selected
+      </span>
+    )}
+  </div>
+);
+
+/* -------------------- Add Button -------------------- */
+
 const AddButton = ({ onClick }) => (
   <button
     type="button"
     onClick={onClick}
-    className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-blue-200 bg-blue-50 px-2.5 text-[11px] font-semibold text-blue-700 hover:bg-blue-100 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-300"
+    className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-blue-200 bg-blue-50 px-2 text-[10px] font-semibold text-blue-700 transition hover:bg-blue-100 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-300"
   >
     <Plus size={12} />
     Add
   </button>
 );
+
+/* -------------------- Trash Button -------------------- */
 
 const RemoveButton = ({ onClick, disabled }) => (
   <button
@@ -189,116 +252,96 @@ const RemoveButton = ({ onClick, disabled }) => (
     onClick={onClick}
     disabled={disabled}
     title="Remove row"
-    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:border-red-200 hover:bg-red-50 hover:text-red-600 disabled:opacity-40 dark:border-gray-700 dark:text-gray-300"
+    aria-label="Remove row"
+    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-500 transition-all duration-150 hover:border-red-500 hover:bg-red-600 hover:text-white active:border-red-700 active:bg-red-700 active:text-white disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-slate-200 disabled:hover:bg-white disabled:hover:text-slate-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:border-red-500 dark:hover:bg-red-600 dark:hover:text-white dark:disabled:hover:border-gray-700 dark:disabled:hover:bg-gray-900"
   >
     <Trash2 size={12} />
   </button>
 );
 
-const ActiveToggle = ({ value, onChange }) => (
-  <button
-    type="button"
-    onClick={() => onChange(!value)}
-    aria-pressed={Boolean(value)}
-    className={`flex h-[30px] w-full min-w-[76px] items-center justify-center gap-1 rounded-md border px-2 text-[10px] font-semibold ${
-      value
-        ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300"
-        : "border-slate-200 bg-slate-50 text-slate-500 dark:border-gray-700 dark:bg-gray-900"
-    }`}
-  >
-    {value ? <Check size={11} /> : <X size={11} />}
-    {value ? "Active" : "Inactive"}
-  </button>
-);
+/* -------------------- Child Sections -------------------- */
 
 const ConfigChildTable = ({
   title,
   type,
   rows,
+  selectedModes,
   modeOptions,
   itemOptions,
   optionsLoading,
   onChange,
+  onToggleMode,
   onAdd,
   onRemove,
   error,
 }) => {
-  const singular =
-    type === "mode" ? "Mode" : type === "service" ? "Service" : "Product";
-
   const Icon =
     type === "mode" ? Layers : type === "service" ? Settings2 : Package;
 
   const showMode = type === "mode";
 
+  const isLoading =
+    type === "mode"
+      ? optionsLoading.modes
+      : type === "service"
+        ? optionsLoading.services
+        : optionsLoading.products;
+
   return (
     <Section
       icon={Icon}
       title={title}
-      subtitle={`${rows.length} ${rows.length === 1 ? "row" : "rows"}`}
-      action={<AddButton onClick={onAdd} />}
+      action={!showMode ? <AddButton onClick={onAdd} /> : null}
     >
-      <div className="space-y-2">
-        {rows.map((row, index) => (
-          <div
-            key={`${type}-${row.id ?? "new"}-${index}`}
-            className="rounded-md border border-slate-100 p-2 dark:border-gray-700"
-          >
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <span className="text-[11px] font-semibold text-slate-600 dark:text-gray-300">
-                {singular} {index + 1}
-              </span>
+      {showMode ? (
+        <div className="space-y-2">
+          <ModeOptionButtons
+            selectedModes={selectedModes}
+            options={modeOptions}
+            onToggle={onToggleMode}
+            disabled={isLoading}
+          />
+
+          {error && <p className="text-[10px] text-red-500">{error}</p>}
+        </div>
+      ) : (
+        <div className="space-y-1.5">
+          {rows.map((row, index) => (
+            <div
+              key={`${type}-${row.id ?? "new"}-${index}`}
+              className="flex min-w-0 items-center gap-1.5"
+            >
+              <div className="min-w-0 flex-1">
+                <SelectField
+                  value={row[type]}
+                  onChange={(value) => onChange(index, type, value)}
+                  options={itemOptions}
+                  type={type}
+                  placeholder={`Select ${
+                    type === "service" ? "Service" : "Product"
+                  }`}
+                  disabled={isLoading}
+                />
+              </div>
 
               <RemoveButton
                 onClick={() => onRemove(index)}
                 disabled={rows.length <= 1}
               />
             </div>
+          ))}
 
-            <div className="grid grid-cols-[minmax(0,1fr)_84px] items-end gap-2">
-              <Field label={singular} required>
-                <SelectField
-                  value={showMode ? row.mode : row[type]}
-                  onChange={(value) =>
-                    onChange(index, showMode ? "mode" : type, value)
-                  }
-                  options={showMode ? modeOptions : itemOptions}
-                  type={type}
-                  placeholder={`Select ${singular}`}
-                  disabled={
-                    showMode ? optionsLoading.modes : optionsLoading[`${type}s`]
-                  }
-                />
-              </Field>
-
-              <Field label="Active">
-                <ActiveToggle
-                  value={row.active}
-                  onChange={(value) => onChange(index, "active", value)}
-                />
-              </Field>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {error && <p className="mt-2 text-[10px] text-red-500">{error}</p>}
+          {error && <p className="text-[10px] text-red-500">{error}</p>}
+        </div>
+      )}
     </Section>
   );
 };
 
-/*
- * The API response for configServices/configProducts contains:
- * { id, mode: "DESCRIPTION", active }
- *
- * It does not include the selected service/product ID.
- * Resolve that ID by matching the returned description against
- * the corresponding dropdown options.
- */
+/* -------------------- Helpers -------------------- */
+
 const normalizeRows = (rows, type, options = []) => {
-  if (!Array.isArray(rows) || rows.length === 0) {
-    return [emptyChild()];
-  }
+  if (!Array.isArray(rows)) return [];
 
   return rows.map((item) => {
     const description = getModeValue(item).trim();
@@ -315,11 +358,11 @@ const normalizeRows = (rows, type, options = []) => {
       item?.[`${type}MasterId`] ??
       "";
 
-    const matchedOption = options.find((option) => {
-      const label = String(getOptionLabel(option, type)).trim().toLowerCase();
-
-      return label === description.toLowerCase();
-    });
+    const matchedOption = options.find(
+      (option) =>
+        String(getOptionLabel(option, type)).trim().toLowerCase() ===
+        description.toLowerCase(),
+    );
 
     const selectedId = explicitId || matchedOption?.id || "";
 
@@ -328,10 +371,11 @@ const normalizeRows = (rows, type, options = []) => {
       mode: description,
       service: type === "service" ? String(selectedId) : "",
       product: type === "product" ? String(selectedId) : "",
-      active: isActive(item),
     };
   });
 };
+
+/* -------------------- Main Form -------------------- */
 
 const ConfigForm = ({ onBack, onSave, data }) => {
   const orgId = ORG_ID;
@@ -341,7 +385,7 @@ const ConfigForm = ({ onBack, onSave, data }) => {
 
   const [header, setHeader] = useState(emptyHeader);
 
-  const [modes, setModes] = useState([emptyChild()]);
+  const [modes, setModes] = useState([]);
   const [services, setServices] = useState([emptyChild()]);
   const [products, setProducts] = useState([emptyChild()]);
 
@@ -359,36 +403,35 @@ const ConfigForm = ({ onBack, onSave, data }) => {
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState({});
   const [error, setError] = useState("");
-
-  // Keep the fetched configuration until dropdown options are available.
   const [loadedConfig, setLoadedConfig] = useState(null);
 
-  // Load dropdown options.
+  /* Load dropdown options */
+
   useEffect(() => {
     let cancelled = false;
 
-    const loadOptions = async () => {
-      const tasks = [
-        {
-          key: "modes",
-          request: () => modeMasterAPI.getAll(orgId),
-          keys: ["modeMasterVO", "modeResponseVO"],
-          setter: setModeOptions,
-        },
-        {
-          key: "services",
-          request: () => serviceAPI.getAll(orgId, branchId),
-          keys: ["serviceResponseVO"],
-          setter: setServiceOptions,
-        },
-        {
-          key: "products",
-          request: () => productAPI.getAll(orgId, branchId),
-          keys: ["productResponseVO"],
-          setter: setProductOptions,
-        },
-      ];
+    const tasks = [
+      {
+        key: "modes",
+        request: () => modeMasterAPI.getAll(orgId),
+        keys: ["modeMasterVO", "modeResponseVO"],
+        setter: setModeOptions,
+      },
+      {
+        key: "services",
+        request: () => serviceAPI.getAll(orgId, branchId),
+        keys: ["serviceResponseVO"],
+        setter: setServiceOptions,
+      },
+      {
+        key: "products",
+        request: () => productAPI.getAll(orgId, branchId),
+        keys: ["productResponseVO"],
+        setter: setProductOptions,
+      },
+    ];
 
+    const loadOptions = async () => {
       await Promise.all(
         tasks.map(async (task) => {
           try {
@@ -423,7 +466,8 @@ const ConfigForm = ({ onBack, onSave, data }) => {
     };
   }, [orgId, branchId]);
 
-  // Fetch configuration details for editing.
+  /* Load configuration for edit */
+
   useEffect(() => {
     let cancelled = false;
 
@@ -431,7 +475,7 @@ const ConfigForm = ({ onBack, onSave, data }) => {
       if (!editId) {
         setLoadedConfig(null);
         setHeader(emptyHeader());
-        setModes([emptyChild()]);
+        setModes([]);
         setServices([emptyChild()]);
         setProducts([emptyChild()]);
         setErrors({});
@@ -467,7 +511,6 @@ const ConfigForm = ({ onBack, onSave, data }) => {
           active: isActive(actualRecord),
         });
 
-        // Child dropdown selections are restored by the next effect.
         setLoadedConfig(actualRecord);
       } catch (err) {
         if (!cancelled) {
@@ -478,9 +521,7 @@ const ConfigForm = ({ onBack, onSave, data }) => {
           );
         }
       } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
+        if (!cancelled) setLoading(false);
       }
     };
 
@@ -491,23 +532,61 @@ const ConfigForm = ({ onBack, onSave, data }) => {
     };
   }, [editId]);
 
-  /*
-   * Restore child selections whenever the configuration or dropdown
-   * options change. This handles either request completing first.
-   */
+  /* Restore child selections */
+
   useEffect(() => {
     if (!loadedConfig) return;
 
-    setModes(normalizeRows(loadedConfig.configModes, "mode", modeOptions));
-
-    setServices(
-      normalizeRows(loadedConfig.configServices, "service", serviceOptions),
+    const loadedModes = normalizeRows(
+      loadedConfig.configModes,
+      "mode",
+      modeOptions,
     );
 
-    setProducts(
-      normalizeRows(loadedConfig.configProducts, "product", productOptions),
+    setModes(
+      loadedModes.map((row) => ({
+        id: row.id,
+        mode: row.mode,
+      })),
     );
+
+    const loadedServices = normalizeRows(
+      loadedConfig.configServices,
+      "service",
+      serviceOptions,
+    );
+
+    setServices(loadedServices.length ? loadedServices : [emptyChild()]);
+
+    const loadedProducts = normalizeRows(
+      loadedConfig.configProducts,
+      "product",
+      productOptions,
+    );
+
+    setProducts(loadedProducts.length ? loadedProducts : [emptyChild()]);
   }, [loadedConfig, modeOptions, serviceOptions, productOptions]);
+
+  /* Toggle multiple modes */
+
+  const toggleMode = (item) => {
+    const label = getOptionLabel(item, "mode");
+
+    if (!label) return;
+
+    setModes((previous) => {
+      const existing = previous.find((row) => row.mode === label);
+
+      if (existing) {
+        return previous.filter((row) => row.mode !== label);
+      }
+
+      return [...previous, { id: null, mode: label }];
+    });
+
+    setErrors((previous) => ({ ...previous, mode: "" }));
+    setError("");
+  };
 
   const updateChild = (setter, index, key, value) => {
     setter((previous) =>
@@ -516,7 +595,6 @@ const ConfigForm = ({ onBack, onSave, data }) => {
 
     setErrors((previous) => ({
       ...previous,
-      mode: "",
       service: "",
       product: "",
     }));
@@ -540,15 +618,16 @@ const ConfigForm = ({ onBack, onSave, data }) => {
     const label =
       type === "mode" ? "Mode" : type === "service" ? "Service" : "Product";
 
-    const invalid = rows.some((row) => {
-      if (type === "mode") {
-        return !String(row.mode).trim();
-      }
+    if (rows.length === 0) {
+      nextErrors[type] = `Select at least one ${label.toLowerCase()}.`;
+      return;
+    }
 
-      return !row[type];
-    });
-
-    if (invalid) {
+    if (
+      rows.some((row) =>
+        type === "mode" ? !String(row.mode ?? "").trim() : !row[type],
+      )
+    ) {
       nextErrors[type] = `Select all required ${label.toLowerCase()} fields.`;
       return;
     }
@@ -560,6 +639,8 @@ const ConfigForm = ({ onBack, onSave, data }) => {
         `Duplicate ${label.toLowerCase()} entries are not allowed.`;
     }
   };
+
+  /* Save configuration */
 
   const handleSave = async (event) => {
     event.preventDefault();
@@ -588,7 +669,7 @@ const ConfigForm = ({ onBack, onSave, data }) => {
       const commonChildFields = (row) => ({
         ...(row.id ? { id: Number(row.id) } : {}),
         ...(isEditMode ? { configId: Number(editId) } : {}),
-        active: Boolean(row.active),
+        active: true,
       });
 
       const selectedService = (serviceId) =>
@@ -615,11 +696,9 @@ const ConfigForm = ({ onBack, onSave, data }) => {
           const service = selectedService(row.service);
 
           return {
-            ...(row.id ? { id: Number(row.id) } : {}),
-            ...(isEditMode ? { configId: Number(editId) } : {}),
+            ...commonChildFields(row),
             service: service?.id ?? Number(row.service),
             mode: service?.serviceDescription ?? "",
-            active: Boolean(row.active),
           };
         }),
 
@@ -627,11 +706,9 @@ const ConfigForm = ({ onBack, onSave, data }) => {
           const product = selectedProduct(row.product);
 
           return {
-            ...(row.id ? { id: Number(row.id) } : {}),
-            ...(isEditMode ? { configId: Number(editId) } : {}),
+            ...commonChildFields(row),
             product: product?.id ?? Number(row.product),
             mode: product?.productDescription ?? "",
-            active: Boolean(row.active),
           };
         }),
       };
@@ -684,30 +761,26 @@ const ConfigForm = ({ onBack, onSave, data }) => {
   return (
     <div className="min-h-screen w-full bg-slate-50 dark:bg-gray-900">
       <div className="w-full px-3 pb-2 pt-3 sm:px-4 lg:px-5">
+        {/* Page header */}
+
         <div className="mb-3 flex items-center gap-2">
           <button
             type="button"
             onClick={onBack}
             disabled={saving}
-            className="flex h-8 w-8 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-600 hover:bg-slate-100 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-600 transition hover:bg-slate-100 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
+            title="Back"
           >
             <ArrowLeft size={15} />
           </button>
 
-          <div>
-            <h1 className="text-base font-bold text-slate-900 dark:text-white sm:text-lg">
-              {isEditMode ? "Edit Configuration" : "Create Configuration"}
-            </h1>
-
-            <p className="text-[11px] text-slate-500 dark:text-gray-400">
-              Manage company modes, services and products
-            </p>
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-blue-600 text-white">
+            <FileText size={15} />
           </div>
 
-          <span className="ml-auto hidden items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-[10px] text-slate-500 sm:inline-flex dark:border-gray-700 dark:bg-gray-800">
-            <FileText size={12} />
-            {isEditMode ? `ID: ${editId}` : "New record"}
-          </span>
+          <h1 className="text-sm font-bold text-slate-900 dark:text-white sm:text-base">
+            {isEditMode ? "Edit Configuration" : "Create Configuration"}
+          </h1>
         </div>
 
         {error && (
@@ -717,70 +790,69 @@ const ConfigForm = ({ onBack, onSave, data }) => {
         )}
 
         <form onSubmit={handleSave} className="space-y-2.5">
-          <Section
-            icon={Building2}
-            title="Configuration Information"
-            subtitle="Company details and status"
-          >
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <Field label="Company Name" required error={errors.company}>
-                <input
-                  value={header.company}
-                  onChange={(event) => {
-                    setHeader((previous) => ({
-                      ...previous,
-                      company: event.target.value,
-                    }));
+          {/* First row: Company + Modes */}
 
-                    setErrors((previous) => ({
-                      ...previous,
-                      company: "",
-                    }));
-                  }}
-                  placeholder="Enter company name"
-                  maxLength={150}
-                  className={`${inputClass} ${
-                    errors.company ? "!border-red-500" : ""
-                  }`}
-                />
-              </Field>
-
-              <Field label="Active">
-                <div className="sm:w-32">
-                  <ActiveToggle
-                    value={header.active}
-                    onChange={(value) =>
+          <div className="grid grid-cols-1 items-stretch gap-2.5 md:grid-cols-2">
+            <Section icon={Building2} title="Company">
+              <div className="grid grid-cols-1 items-end gap-3 sm:grid-cols-[minmax(0,380px)_100px]">
+                <Field label="Company Name" required error={errors.company}>
+                  <input
+                    value={header.company}
+                    onChange={(event) => {
                       setHeader((previous) => ({
                         ...previous,
-                        active: value,
-                      }))
-                    }
-                  />
-                </div>
-              </Field>
-            </div>
-          </Section>
+                        company: event.target.value,
+                      }));
 
-          <div className="grid grid-cols-1 items-start gap-2.5 md:grid-cols-3">
+                      setErrors((previous) => ({
+                        ...previous,
+                        company: "",
+                      }));
+                    }}
+                    placeholder="Enter company name"
+                    maxLength={150}
+                    className={`${inputClass} ${
+                      errors.company ? "!border-red-500" : ""
+                    }`}
+                  />
+                </Field>
+
+                <ActiveToggle
+                  value={header.active}
+                  onChange={(value) =>
+                    setHeader((previous) => ({
+                      ...previous,
+                      active: value,
+                    }))
+                  }
+                />
+              </div>
+            </Section>
+
             <ConfigChildTable
               title="Modes"
               type="mode"
-              rows={modes}
+              rows={[]}
+              selectedModes={modes}
               modeOptions={modeOptions}
               itemOptions={[]}
               optionsLoading={optionsLoading}
               error={errors.mode}
-              onChange={(index, key, value) =>
-                updateChild(setModes, index, key, value)
-              }
-              onAdd={() => addChild(setModes)}
-              onRemove={(index) => removeChild(setModes, index)}
+              onToggleMode={toggleMode}
+              onChange={() => {}}
+              onAdd={() => {}}
+              onRemove={() => {}}
             />
+          </div>
 
+          {/* Second row: Services + Products */}
+
+          <div className="grid grid-cols-1 items-start gap-2.5 md:grid-cols-2">
             <ConfigChildTable
               title="Services"
               type="service"
               rows={services}
+              selectedModes={[]}
               modeOptions={[]}
               itemOptions={serviceOptions}
               optionsLoading={optionsLoading}
@@ -796,6 +868,7 @@ const ConfigForm = ({ onBack, onSave, data }) => {
               title="Products"
               type="product"
               rows={products}
+              selectedModes={[]}
               modeOptions={[]}
               itemOptions={productOptions}
               optionsLoading={optionsLoading}
@@ -808,12 +881,14 @@ const ConfigForm = ({ onBack, onSave, data }) => {
             />
           </div>
 
+          {/* Actions */}
+
           <div className="sticky bottom-0 z-10 flex flex-col-reverse gap-2 border-t border-slate-200 bg-slate-50 py-2 sm:flex-row sm:justify-end dark:border-gray-800 dark:bg-gray-900">
             <button
               type="button"
               onClick={onBack}
               disabled={saving}
-              className="inline-flex h-[32px] items-center justify-center gap-1.5 rounded-md border border-slate-300 bg-white px-3.5 text-[12px] font-semibold text-slate-600 hover:bg-slate-100 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
+              className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md border border-slate-300 bg-white px-3.5 text-[11px] font-semibold text-slate-600 transition hover:bg-slate-100 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
             >
               <X size={12} />
               Cancel
@@ -822,7 +897,7 @@ const ConfigForm = ({ onBack, onSave, data }) => {
             <button
               type="submit"
               disabled={saving}
-              className="inline-flex h-[32px] items-center justify-center gap-1.5 rounded-md bg-blue-600 px-[19px] text-[12px] font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+              className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md bg-blue-600 px-5 text-[11px] font-semibold text-white transition hover:bg-blue-700 disabled:opacity-50"
             >
               {saving ? (
                 <Loader2 size={12} className="animate-spin" />
