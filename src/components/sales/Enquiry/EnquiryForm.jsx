@@ -154,8 +154,9 @@ const TextField = ({
       aria-invalid={!!error}
       aria-required={required || undefined}
       onChange={(e) => onChange?.(e.target.value)}
-      className={`${inputClass} ${error ? "!border-rose-500 focus:!ring-rose-500/10" : ""
-        }`}
+      className={`${inputClass} ${
+        error ? "!border-rose-500 focus:!ring-rose-500/10" : ""
+      }`}
       {...rest}
     />
   </Field>
@@ -179,8 +180,9 @@ const SelectField = ({
       aria-invalid={!!error}
       aria-required={required || undefined}
       onChange={(e) => onChange(e.target.value)}
-      className={`${inputClass} ${error ? "!border-rose-500 focus:!ring-rose-500/10" : ""
-        }`}
+      className={`${inputClass} ${
+        error ? "!border-rose-500 focus:!ring-rose-500/10" : ""
+      }`}
     >
       <option value="">{placeholder}</option>
       {options.map((option) => {
@@ -203,16 +205,18 @@ const ModeCard = ({ value, hint, icon: Icon, selected, onClick }) => (
     type="button"
     onClick={() => onClick(value)}
     aria-pressed={selected}
-    className={`flex w-full items-center gap-2 rounded-lg border p-2 text-left transition ${selected
+    className={`flex w-full items-center gap-2 rounded-lg border p-2 text-left transition ${
+      selected
         ? "border-blue-600 bg-blue-50 ring-2 ring-blue-600/10 dark:bg-blue-500/10"
         : "border-slate-200 bg-white hover:border-slate-300 dark:border-gray-700 dark:bg-gray-900"
-      }`}
+    }`}
   >
     <span
-      className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md ${selected
+      className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md ${
+        selected
           ? "bg-blue-600 text-white"
           : "bg-slate-100 text-slate-500 dark:bg-gray-800 dark:text-gray-300"
-        }`}
+      }`}
     >
       <Icon size={18} />
     </span>
@@ -250,7 +254,7 @@ const StepHeader = ({ step, title, subtitle }) => (
 /* Screen                                                              */
 /* ------------------------------------------------------------------ */
 
-export default function EnquiryForm({ onBack = () => { }, onSave, editData }) {
+export default function EnquiryForm({ onBack = () => {}, onSave, editData }) {
   const [step, setStep] = useState(1);
   const [form, setForm] = useState(() => ({
     ...initialForm,
@@ -313,8 +317,8 @@ export default function EnquiryForm({ onBack = () => { }, onSave, editData }) {
             : apiMode === "ROAD"
               ? record.originTerminal
               : record.originPort ||
-              record.originAirport ||
-              record.originTerminal;
+                record.originAirport ||
+                record.originTerminal;
 
       const pickDestination =
         apiMode === "SEA"
@@ -324,8 +328,8 @@ export default function EnquiryForm({ onBack = () => { }, onSave, editData }) {
             : apiMode === "ROAD"
               ? record.destinationTerminal
               : record.destinationPort ||
-              record.destinationAirport ||
-              record.destinationTerminal;
+                record.destinationAirport ||
+                record.destinationTerminal;
 
       setForm({
         id: record.id || id,
@@ -665,11 +669,7 @@ export default function EnquiryForm({ onBack = () => { }, onSave, editData }) {
     return (
       <div className="flex h-[90dvh] w-full items-center justify-center bg-slate-100 dark:bg-gray-950">
         <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-gray-300">
-          <svg
-            className="h-4 w-4 animate-spin"
-            viewBox="0 0 24 24"
-            fill="none"
-          >
+          <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
             <circle
               className="opacity-25"
               cx="12"
@@ -747,16 +747,19 @@ export default function EnquiryForm({ onBack = () => { }, onSave, editData }) {
                   onClick={() => goToStep(stepNo)}
                   disabled={!clickable}
                   aria-current={step === stepNo ? "step" : undefined}
-                  className={`text-left ${clickable ? "cursor-pointer" : "cursor-default"
-                    }`}
+                  className={`text-left ${
+                    clickable ? "cursor-pointer" : "cursor-default"
+                  }`}
                 >
                   <div
-                    className={`h-1 rounded-full transition ${step >= stepNo ? "bg-blue-400" : "bg-white/20"
-                      }`}
+                    className={`h-1 rounded-full transition ${
+                      step >= stepNo ? "bg-blue-400" : "bg-white/20"
+                    }`}
                   />
                   <p
-                    className={`mt-1 truncate text-[9px] ${step >= stepNo ? "text-white" : "text-slate-400"
-                      }`}
+                    className={`mt-1 truncate text-[9px] ${
+                      step >= stepNo ? "text-white" : "text-slate-400"
+                    }`}
                   >
                     {title}
                   </p>
@@ -771,12 +774,6 @@ export default function EnquiryForm({ onBack = () => { }, onSave, editData }) {
           {/* STEP 1: Combined Shipment Mode & Movement */}
           {step === 1 && (
             <div className="space-y-3">
-              <StepHeader
-                step={1}
-                title="Shipment details"
-                subtitle="Choose the mode of transport and the movement direction."
-              />
-
               <div>
                 <p className="mb-1 text-[11px] font-medium text-slate-600 dark:text-gray-300">
                   Shipment mode
@@ -824,16 +821,18 @@ export default function EnquiryForm({ onBack = () => { }, onSave, editData }) {
                         type="button"
                         onClick={() => setField("movement", value)}
                         aria-pressed={selected}
-                        className={`flex items-center gap-2 rounded-lg border p-2 text-left transition ${selected
+                        className={`flex items-center gap-2 rounded-lg border p-2 text-left transition ${
+                          selected
                             ? "border-blue-600 bg-blue-50 ring-2 ring-blue-600/10 dark:bg-blue-500/10"
                             : "border-slate-200 hover:border-slate-300 dark:border-gray-700"
-                          }`}
+                        }`}
                       >
                         <span
-                          className={`flex h-8 w-8 items-center justify-center rounded-md ${selected
+                          className={`flex h-8 w-8 items-center justify-center rounded-md ${
+                            selected
                               ? "bg-blue-600 text-white"
                               : "bg-slate-100 text-slate-600 dark:bg-gray-800 dark:text-gray-300"
-                            }`}
+                          }`}
                         >
                           <Icon size={18} />
                         </span>
@@ -864,11 +863,6 @@ export default function EnquiryForm({ onBack = () => { }, onSave, editData }) {
           {/* STEP 2: Route */}
           {step === 2 && (
             <div>
-              <StepHeader
-                step={2}
-                title="Set the shipment route"
-                subtitle="Pick origin and destination, then the matching location."
-              />
               <Section
                 icon={MapPin}
                 title="Shipment route"
@@ -886,9 +880,7 @@ export default function EnquiryForm({ onBack = () => { }, onSave, editData }) {
                     required
                     list="enquiry-places"
                     value={form.origin}
-                    onChange={(value) =>
-                      setField("origin", value, { pol: "" })
-                    }
+                    onChange={(value) => setField("origin", value, { pol: "" })}
                     placeholder="e.g. Bengaluru"
                     error={errors.origin}
                   />
@@ -943,12 +935,6 @@ export default function EnquiryForm({ onBack = () => { }, onSave, editData }) {
           {/* STEP 3: Cargo Details */}
           {step === 3 && (
             <div className="space-y-2">
-              <StepHeader
-                step={3}
-                title="Complete enquiry details"
-                subtitle="Review the shipment and add customer & cargo information."
-              />
-
               {/* Compact shipment summary strip */}
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 dark:border-gray-700 dark:bg-gray-800/60">
                 <div className="flex min-w-0 items-center gap-1.5 text-xs">
@@ -1036,7 +1022,10 @@ export default function EnquiryForm({ onBack = () => { }, onSave, editData }) {
                             setCargoField("cargoType", value)
                           }
                           options={[
-                            { value: "FCL", label: "FCL — Full Container Load" },
+                            {
+                              value: "FCL",
+                              label: "FCL — Full Container Load",
+                            },
                             {
                               value: "LCL",
                               label: "LCL — Less than Container Load",
@@ -1107,9 +1096,7 @@ export default function EnquiryForm({ onBack = () => { }, onSave, editData }) {
                             required
                             type="number"
                             value={cargo.weight}
-                            onChange={(value) =>
-                              setCargoField("weight", value)
-                            }
+                            onChange={(value) => setCargoField("weight", value)}
                             error={errors.weight}
                           />
                         )}
@@ -1123,9 +1110,7 @@ export default function EnquiryForm({ onBack = () => { }, onSave, editData }) {
                           required
                           type="number"
                           value={cargo.packages}
-                          onChange={(value) =>
-                            setCargoField("packages", value)
-                          }
+                          onChange={(value) => setCargoField("packages", value)}
                           error={errors.packages}
                         />
                         <TextField
@@ -1141,27 +1126,21 @@ export default function EnquiryForm({ onBack = () => { }, onSave, editData }) {
                             label="Length (CM)"
                             type="number"
                             value={cargo.length}
-                            onChange={(value) =>
-                              setCargoField("length", value)
-                            }
+                            onChange={(value) => setCargoField("length", value)}
                             error={errors.length}
                           />
                           <TextField
                             label="Width (CM)"
                             type="number"
                             value={cargo.width}
-                            onChange={(value) =>
-                              setCargoField("width", value)
-                            }
+                            onChange={(value) => setCargoField("width", value)}
                             error={errors.width}
                           />
                           <TextField
                             label="Height (CM)"
                             type="number"
                             value={cargo.height}
-                            onChange={(value) =>
-                              setCargoField("height", value)
-                            }
+                            onChange={(value) => setCargoField("height", value)}
                             error={errors.height}
                           />
                         </div>
@@ -1199,9 +1178,7 @@ export default function EnquiryForm({ onBack = () => { }, onSave, editData }) {
                           label="No. of packages"
                           type="number"
                           value={cargo.packages}
-                          onChange={(value) =>
-                            setCargoField("packages", value)
-                          }
+                          onChange={(value) => setCargoField("packages", value)}
                           error={errors.packages}
                         />
                       </>
@@ -1209,17 +1186,17 @@ export default function EnquiryForm({ onBack = () => { }, onSave, editData }) {
                   </div>
 
                   {/* <div className="grid grid-cols-2 gap-1.5 border-t border-slate-100 pt-1.5 dark:border-gray-700"> */}
-                    <div className="rounded-md bg-slate-50 px-2 py-1 dark:bg-gray-900">
-                      <p className="text-[10px] text-slate-500 dark:text-gray-400">
-                        Gross weight
-                      </p>
-                      <p className="text-xs font-bold text-slate-900 dark:text-white">
-                        {totalWeight.toLocaleString(undefined, {
-                          maximumFractionDigits: 2,
-                        })}{" "}
-                        kg
-                      </p>
-                    </div>
+                  <div className="rounded-md bg-slate-50 px-2 py-1 dark:bg-gray-900">
+                    <p className="text-[10px] text-slate-500 dark:text-gray-400">
+                      Gross weight
+                    </p>
+                    <p className="text-xs font-bold text-slate-900 dark:text-white">
+                      {totalWeight.toLocaleString(undefined, {
+                        maximumFractionDigits: 2,
+                      })}{" "}
+                      kg
+                    </p>
+                  </div>
                   {/* </div> */}
                 </Section>
               </div>
