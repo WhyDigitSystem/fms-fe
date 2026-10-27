@@ -47,7 +47,7 @@ export const POLICY = {
   requireSalespersonOnSubmit: true,
   requireEtdOnSubmit: false,
   requireIncotermOnSubmit: true,
-  requireFreightTermsOnSubmit: true,
+  requireFreightTermsOnSubmit: false,
   requireRatesOnSubmit: false,
   requireContactForDoorService: true,
   blockOnCreditHold: true,
@@ -625,10 +625,10 @@ export const hydrate = (d = {}) => {
     },
     cargoLines: d.cargoLines?.length
       ? d.cargoLines.map((l) => ({
-          ...emptyLine(),
-          ...l,
-          handling: [...(l.handling || [])],
-        }))
+        ...emptyLine(),
+        ...l,
+        handling: [...(l.handling || [])],
+      }))
       : [emptyLine()],
     audit: [...(d.audit || [])],
   };
@@ -715,7 +715,6 @@ export const validateBooking = (f, action = "draft") => {
   const cust = customers.find((c) => c.id === f.customer);
   const hasReefer =
     f.cargoLines.some((l) => l.reefer === "Yes") || !!svc?.reefer;
-  const hasDG = f.cargoLines.some((l) => l.dg === "Yes");
   const door = f.pickupRequired || f.deliveryRequired;
 
   /* ---- Always (Save Draft and Submit) ---- */
@@ -926,10 +925,6 @@ export const validateBooking = (f, action = "draft") => {
       "Customer credit is On Hold - submission is blocked",
       "commercial",
     );
-
-  if (hasDG && !f.docs.files.some((d) => d.category === "DG Documents"))
-    add("docs.dg", "Upload DG documents for dangerous goods", "documents");
-
   return finish(list);
 };
 

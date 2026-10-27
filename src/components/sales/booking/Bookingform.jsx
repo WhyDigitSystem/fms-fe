@@ -38,7 +38,6 @@ import {
   CURRENT_USER,
   DIM_UOMS,
   DOC_CATEGORIES,
-  EDITABLE_STATUSES,
   EQUIPMENT_PREFS,
   FREIGHT_TERMS,
   HANDLING,
@@ -77,9 +76,10 @@ import {
   users,
   validateBooking,
 } from "./bookingData";
+import BookingAPI from "../../../api/sales/bookingAPI";
 
 /* ------------------------------------------------------------------ */
-/* Styling tokens (same as Enquiry screens)                            */
+/* Styling tokens                                                      */
 /* ------------------------------------------------------------------ */
 
 const inputClass =
@@ -251,7 +251,6 @@ const TextAreaField = ({
   </Field>
 );
 
-// Searchable dropdown (customers, parties, ports, airports, addresses, carriers...)
 const LookupField = ({
   label,
   required,
@@ -272,8 +271,8 @@ const LookupField = ({
     const t = q.trim().toLowerCase();
     const list = t
       ? options.filter((o) =>
-          `${o.label} ${o.sub || ""} ${o.value}`.toLowerCase().includes(t),
-        )
+        `${o.label} ${o.sub || ""} ${o.value}`.toLowerCase().includes(t),
+      )
       : options;
     return list.slice(0, 50);
   }, [options, q]);
@@ -312,9 +311,8 @@ const LookupField = ({
               e.currentTarget.blur();
             }
           }}
-          className={`${inputClass} pl-8 ${selected && !disabled ? "pr-8" : ""} ${
-            error ? errClass : ""
-          }`}
+          className={`${inputClass} pl-8 ${selected && !disabled ? "pr-8" : ""} ${error ? errClass : ""
+            }`}
         />
         {selected && !disabled && (
           <button
@@ -343,11 +341,10 @@ const LookupField = ({
                       onChange(o.value);
                       setOpen(false);
                     }}
-                    className={`flex w-full items-center justify-between gap-2 px-2.5 py-1.5 text-left hover:bg-blue-50 dark:hover:bg-blue-500/10 ${
-                      o.value === value
-                        ? "bg-blue-50/60 font-semibold text-blue-700 dark:bg-blue-500/10 dark:text-blue-300"
-                        : "text-slate-700 dark:text-gray-200"
-                    }`}
+                    className={`flex w-full items-center justify-between gap-2 px-2.5 py-1.5 text-left hover:bg-blue-50 dark:hover:bg-blue-500/10 ${o.value === value
+                      ? "bg-blue-50/60 font-semibold text-blue-700 dark:bg-blue-500/10 dark:text-blue-300"
+                      : "text-slate-700 dark:text-gray-200"
+                      }`}
                   >
                     <span className="truncate">{o.label}</span>
                     {o.sub && (
@@ -366,7 +363,6 @@ const LookupField = ({
   );
 };
 
-// Currency + amount pair (sell / buy rate)
 const AmountField = ({
   label,
   error,
@@ -431,28 +427,25 @@ const ModeButton = ({ value, hint, icon: Icon, selected, onClick }) => (
     type="button"
     onClick={() => onClick(value)}
     aria-pressed={selected}
-    className={`relative flex items-center gap-2 rounded-lg border px-3 py-2 text-left transition disabled:cursor-not-allowed disabled:opacity-60 ${
-      selected
-        ? "border-blue-500 bg-blue-50 ring-1 ring-blue-500/40 dark:bg-blue-500/10"
-        : "border-slate-300 bg-white hover:border-slate-400 dark:border-gray-700 dark:bg-gray-900 dark:hover:border-gray-600"
-    }`}
+    className={`relative flex items-center gap-2 rounded-lg border px-3 py-2 text-left transition disabled:cursor-not-allowed disabled:opacity-60 ${selected
+      ? "border-blue-500 bg-blue-50 ring-1 ring-blue-500/40 dark:bg-blue-500/10"
+      : "border-slate-300 bg-white hover:border-slate-400 dark:border-gray-700 dark:bg-gray-900 dark:hover:border-gray-600"
+      }`}
   >
     <span
-      className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md ${
-        selected
-          ? "bg-blue-600 text-white"
-          : "bg-slate-100 text-slate-500 dark:bg-gray-800 dark:text-gray-400"
-      }`}
+      className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md ${selected
+        ? "bg-blue-600 text-white"
+        : "bg-slate-100 text-slate-500 dark:bg-gray-800 dark:text-gray-400"
+        }`}
     >
       <Icon size={14} />
     </span>
     <span className="min-w-0">
       <span
-        className={`block text-[12px] font-semibold ${
-          selected
-            ? "text-blue-700 dark:text-blue-300"
-            : "text-slate-700 dark:text-gray-200"
-        }`}
+        className={`block text-[12px] font-semibold ${selected
+          ? "text-blue-700 dark:text-blue-300"
+          : "text-slate-700 dark:text-gray-200"
+          }`}
       >
         {value}
       </span>
@@ -471,9 +464,8 @@ const ModeButton = ({ value, hint, icon: Icon, selected, onClick }) => (
 
 const StatusChip = ({ status }) => (
   <span
-    className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ring-inset ${
-      statusStyles[status] || statusStyles.Draft
-    }`}
+    className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ring-inset ${statusStyles[status] || statusStyles.Draft
+      }`}
   >
     <span
       className={`h-1.5 w-1.5 rounded-full ${statusDots[status] || statusDots.Draft}`}
@@ -501,9 +493,8 @@ const Modal = ({ title, onClose, children, footer, wide }) => (
     }}
   >
     <div
-      className={`w-full ${
-        wide ? "max-w-2xl" : "max-w-md"
-      } rounded-lg border border-slate-200 bg-white shadow-xl dark:border-gray-700 dark:bg-gray-900`}
+      className={`w-full ${wide ? "max-w-2xl" : "max-w-md"
+        } rounded-lg border border-slate-200 bg-white shadow-xl dark:border-gray-700 dark:bg-gray-900`}
     >
       <div className="flex items-center justify-between border-b border-slate-100 px-3 py-2 dark:border-gray-700/60">
         <h3 className="text-[13px] font-semibold text-slate-900 dark:text-white">
@@ -528,7 +519,6 @@ const Modal = ({ title, onClose, children, footer, wide }) => (
   </div>
 );
 
-// Generic controlled-action dialog (cancel / hold / reject / carrier confirmation / amend)
 const ActionModal = ({ config, busy, onClose, onSubmit }) => {
   const [values, setValues] = useState(() =>
     Object.fromEntries(config.fields.map((f) => [f.name, f.initial ?? ""])),
@@ -563,11 +553,10 @@ const ActionModal = ({ config, busy, onClose, onSubmit }) => {
             type="button"
             onClick={submit}
             disabled={busy}
-            className={`${btnBase} text-white ${
-              config.danger
-                ? "bg-red-600 hover:bg-red-700"
-                : "bg-blue-600 hover:bg-blue-700"
-            }`}
+            className={`${btnBase} text-white ${config.danger
+              ? "bg-red-600 hover:bg-red-700"
+              : "bg-blue-600 hover:bg-blue-700"
+              }`}
           >
             {busy ? "Saving..." : config.confirmLabel}
           </button>
@@ -639,7 +628,7 @@ const ActionModal = ({ config, busy, onClose, onSubmit }) => {
 /* Form                                                                */
 /* ------------------------------------------------------------------ */
 
-const BookingForm = ({ editData, onBack, onSave, onNotify }) => {
+const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
   const initial = useMemo(
     () => (editData ? hydrate(editData) : emptyForm()),
     [],
@@ -657,21 +646,27 @@ const BookingForm = ({ editData, onBack, onSave, onNotify }) => {
   const [dragOver, setDragOver] = useState(false);
   const [uploadMsgs, setUploadMsgs] = useState([]);
 
-  const savedRef = useRef(initial); // last server-confirmed state (used by Reset)
+  // ✅ New states for Doc ID & Record Loading
+  const [loadingDocId, setLoadingDocId] = useState(false);
+  const [recordLoading, setRecordLoading] = useState(false);
+
+  const savedRef = useRef(initial);
   const baselineRef = useRef(snapshot(initial));
-  const requestIdRef = useRef(uid()); // idempotency key: stops duplicate records on double click / retry
   const busyRef = useRef(false);
   const salesTouched = useRef(false);
   const menuRef = useRef(null);
   const fileInputRef = useRef(null);
 
+  const orgId = parseInt(localStorage.getItem("orgId")) || 1000000001;
+  const loginUserName = localStorage.getItem("userName") || "SYSTEM";
+
   /* ---------- derived ---------- */
   const svc = getService(form.mode, form.serviceType);
   const customer = customers.find((c) => c.id === form.customer);
-  const editable = EDITABLE_STATUSES.includes(form.status);
+  // ✅ Always editable
+  const editable = true;
   const hasReefer =
     form.cargoLines.some((l) => l.reefer === "Yes") || !!svc?.reefer;
-  const hasDG = form.cargoLines.some((l) => l.dg === "Yes");
   const needsEquipment = !!svc?.equipment;
   const showEquipment = needsEquipment || hasReefer;
   const totals = useMemo(
@@ -830,6 +825,173 @@ const BookingForm = ({ editData, onBack, onSave, onNotify }) => {
     return () => io.disconnect();
   }, [sectionKey]);
 
+  /* ---------- ✅ Fetch DocId on create ---------- */
+  useEffect(() => {
+    const fetchDocId = async () => {
+      if (form.id) return; // Skip if editing
+      try {
+        setLoadingDocId(true);
+        const docId = await BookingAPI.getBookingDocId(orgId);
+        setForm((p) => ({ ...p, bookingNo: docId || "" }));
+      } catch (err) {
+        console.error("Failed to fetch booking docId:", err);
+      } finally {
+        setLoadingDocId(false);
+      }
+    };
+    fetchDocId();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orgId, form.id]);
+
+  /* ---------- ✅ Fetch Full Record on Edit ---------- */
+  useEffect(() => {
+    const fetchRecord = async () => {
+      if (!editData?.id) return;
+
+      try {
+        setRecordLoading(true);
+        const response = await BookingAPI.getBookingById(editData.id);
+        if (!response) return;
+
+        // Unwrap the nested bookingVO response
+        const record =
+          response?.paramObjectsMap?.bookingVO ||
+          response?.bookingVO ||
+          response;
+
+        if (!record) {
+          setNotice({ type: "error", text: "Booking record not found." });
+          return;
+        }
+
+        const routing = record.routingDetails?.[0] || {};
+        const party = record.partyDetails?.[0] || {};
+        const commercial = record.commercialDetails?.[0] || {};
+        const equipment = record.equipmentDetails?.[0] || {};
+        const instruction = record.instructionDetails?.[0] || {};
+
+        // Map cargo lines
+        const cargoLines = (record.cargoDetails || []).map((c) => ({
+          id: uid(),
+          commodity: c.commodityDescription || "",
+          pkgType: c.packageType || "",
+          qty: c.packageCount?.toString() || "",
+          weight: c.grossWeight?.toString() || "",
+          weightUom: c.weightUnit || "kg",
+          volume: c.volume?.toString() || "",
+          volumeUom:
+            c.volumeUnit === "CBM" ? "m³" : c.volumeUnit || "m³",
+          length: c.length?.toString() || "",
+          width: c.width?.toString() || "",
+          height: c.height?.toString() || "",
+          dimUom: c.dimensionUnit || "cm",
+          hsCode: "", // API doesn't return hsCode
+          dg: c.hazardous ? "Yes" : "No",
+          reefer: c.equipmentType === "Reefer" ? "Yes" : "No",
+          handling: [],
+          remarks: c.remarks || "",
+        }));
+
+        // ✅ Map existing uploaded files from instructionDetails
+        const existingFiles = (record.instructionDetails || [])
+          .filter((d) => d.document)
+          .map((d) => ({
+            id: uid(),
+            name: d.originalName || d.fileName || "Document",
+            size: d.fileSize || 0,
+            category: d.documentType || DOC_CATEGORIES[0],
+            url: d.document,
+            file: null, // no local File object
+            isExisting: true, // flag to avoid re-upload
+            uploadedOn: d.uploadOn || null,
+            contentType: d.contentType || null,
+          }));
+
+        setForm({
+          id: record.id,
+          bookingNo: record.docId || "",
+          bookingDate: record.docDate || today(),
+          branch: record.branch?.branchCode || CURRENT_USER.branch,
+          status: record.bookingStatus || "Draft",
+          bookingType: record.bookingType || "Export",
+          mode: record.transportMode || "Sea",
+          serviceType: record.serviceType || "",
+          customer: record.customer || "",
+          customerRef: record.customerReference || "",
+          salesperson: record.salesperson || "",
+          opsOwner: record.operationsOwner || "",
+
+          pickupRequired: !!routing.placeOfReceipt,
+          deliveryRequired: !!routing.placeOfDelivery,
+          placeOfReceipt: routing.placeOfReceipt || "",
+          origin: routing.origin || "",
+          destination: routing.destination || "",
+          placeOfDelivery: routing.placeOfDelivery || "",
+          etd: routing.requestedETD || "",
+          eta: routing.requestedETA || "",
+          carrier: routing.carrierPreference || "",
+          routingPref: routing.routingPreference || "",
+          incoterm: routing.incoterm || "",
+          incotermPlace: "", // Not returned
+
+          shipper: party.shipper || "",
+          consignee: party.consignee || "",
+          notifyParty: party.notifyParty || "",
+          billingCustomer: party.billingCustomer || "",
+          pickupAddress: party.pickupAddress || "",
+          deliveryAddress: party.deliveryAddress || "",
+          contactPerson: party.contactPerson || "",
+          email: party.email || "",
+          phone: party.phone || "",
+
+          cargoLines: cargoLines.length ? cargoLines : [emptyLine()],
+
+          equipment: {
+            loadType: equipment.equipmentType === "LCL" ? "LCL" : "FCL",
+            containerType: equipment.containerType || "",
+            containerQty: equipment.quantity?.toString() || "",
+            reeferTemp: equipment.temperatureMin?.toString() || "",
+            tempUnit: "°C",
+            equipPref: equipment.specialEquipment
+              ? "Special Equipment"
+              : "Standard",
+            containerAlloc: "Pending",
+          },
+
+          commercial: {
+            freightTerms: commercial.freightPaymentTerms || "",
+            quotationRef: commercial.quotationReference || "",
+            sellCurrency: commercial.sellCurrency || "USD",
+            sellRate: commercial.sellRate?.toString() || "",
+            buyCurrency: commercial.buyCurrency || "USD",
+            buyRate: commercial.buyRate?.toString() || "",
+            currency: commercial.sellCurrency || "USD",
+            paymentTerms: commercial.paymentTerms || "",
+            remarks: commercial.commercialRemarks || "",
+          },
+
+          docs: {
+            files: existingFiles,
+            pickupInstructions: instruction.pickupInstructions || "",
+            deliveryInstructions: instruction.deliveryInstructions || "",
+            internalRemarks: instruction.internalRemarks || "",
+          },
+          carrierConfirmation: null,
+          audit: [],
+        });
+
+        savedRef.current = record;
+      } catch (error) {
+        console.error("Error fetching booking:", error);
+        setNotice({ type: "error", text: "Failed to load booking details." });
+      } finally {
+        setRecordLoading(false);
+      }
+    };
+    fetchRecord();
+  }, [editData?.id]);
+
+
   /* ---------- helpers ---------- */
   const scrollToSection = (id) => {
     setActiveTab(id);
@@ -934,10 +1096,10 @@ const BookingForm = ({ editData, onBack, onSave, onNotify }) => {
         ...(ok
           ? {}
           : {
-              customer: "",
-              billingCustomer:
-                p.billingCustomer === p.customer ? "" : p.billingCustomer,
-            }),
+            customer: "",
+            billingCustomer:
+              p.billingCustomer === p.customer ? "" : p.billingCustomer,
+          }),
       };
     });
     clearErr((k) => ["branch", "customer"].includes(k));
@@ -974,10 +1136,10 @@ const BookingForm = ({ editData, onBack, onSave, onNotify }) => {
         quotationRef: id,
         ...(q && !p.commercial.sellRate
           ? {
-              sellRate: String(q.sell),
-              sellCurrency: q.currency,
-              currency: p.commercial.currency || q.currency,
-            }
+            sellRate: String(q.sell),
+            sellCurrency: q.currency,
+            currency: p.commercial.currency || q.currency,
+          }
           : {}),
       },
     }));
@@ -1009,6 +1171,7 @@ const BookingForm = ({ editData, onBack, onSave, onNotify }) => {
           size: f.size,
           category: docCategory,
           file: f,
+          isExisting: false,
         });
     });
     if (accepted.length) {
@@ -1016,7 +1179,6 @@ const BookingForm = ({ editData, onBack, onSave, onNotify }) => {
         ...p,
         docs: { ...p.docs, files: [...p.docs.files, ...accepted] },
       }));
-      clearErr((k) => k === "docs.dg");
     }
     setUploadMsgs(rejected);
   };
@@ -1043,41 +1205,197 @@ const BookingForm = ({ editData, onBack, onSave, onNotify }) => {
       form,
       action === "submit" ? "submit" : "draft",
     );
-    setErrorList(list);
+    // setErrorList(list);
 
-    if (list.length) {
-      const open = {};
-      list.forEach((e) => {
-        const m = /^line\.([^.]+)\.(length|width|height|hsCode)$/.exec(e.key);
-        if (m) open[m[1]] = true;
-      });
-      setExpanded((p) => ({ ...p, ...open }));
-      setNotice({
-        type: "error",
-        text: `Please fix ${list.length} issue${list.length > 1 ? "s" : ""} before ${
-          action === "submit" ? "submitting" : "saving"
-        }.`,
-      });
-      scrollToSection(list[0].section);
-      return null;
-    }
+    // if (list.length) {
+    //   const open = {};
+    //   list.forEach((e) => {
+    //     const m = /^line\.([^.]+)\.(length|width|height|hsCode)$/.exec(e.key);
+    //     if (m) open[m[1]] = true;
+    //   });
+    //   setExpanded((p) => ({ ...p, ...open }));
+    //   setNotice({
+    //     type: "error",
+    //     text: `Please fix ${list.length} issue${list.length > 1 ? "s" : ""} before ${action === "submit" ? "submitting" : "saving"
+    //       }.`,
+    //   });
+    //   scrollToSection(list[0].section);
+    //   return null;
+    // }
 
     busyRef.current = true;
     setBusy(action);
+
     try {
-      const saved = await onSave(
-        {
-          ...form,
-          clientRequestId: requestIdRef.current,
-          status: action === "submit" ? "Submitted" : form.status,
-        },
-        { action },
+      const isUpdate = Boolean(form.id && form.id > 0);
+
+      // ✅ Build API payload (bookingDTO)
+      const apiPayload = {
+        orgId,
+        createdBy: loginUserName,
+        branch: Number(form.branch) || orgId,
+        bookingStatus:
+          action === "submit" ? "Submitted" : form.status || "Draft",
+        bookingType: form.bookingType || "Standard",
+        transportMode: form.mode || "",
+        serviceType: form.serviceType || "",
+        salesperson: form.salesperson || "",
+        operationsOwner: form.opsOwner || "",
+        customer: form.customer || "",
+        customerReference: form.customerRef || "",
+        remarks: form.commercial?.remarks || "",
+
+        // ✅ Added bookingNo to payload
+        bookingNo: form.bookingNo || "",
+
+        routingDetails: [
+          {
+            carrierPreference: form.carrier || "",
+            destination: form.destination || "",
+            incoterm: form.incoterm || "",
+            origin: form.origin || "",
+            placeOfDelivery: form.placeOfDelivery || "",
+            placeOfReceipt: form.placeOfReceipt || "",
+            requestedETA: form.eta || null,
+            requestedETD: form.etd || null,
+            routingPreference: form.routingPref || "",
+          },
+        ],
+
+        partyDetails: [
+          {
+            billingCustomer: form.billingCustomer || "",
+            consignee: form.consignee || "",
+            contactPerson: form.contactPerson || "",
+            deliveryAddress: form.deliveryAddress || "",
+            email: form.email || "",
+            notifyParty: form.notifyParty || "",
+            phone: form.phone || "",
+            pickupAddress: form.pickupAddress || "",
+            shipper: form.shipper || "",
+          },
+        ],
+
+        cargoDetails: (form.cargoLines || []).map((line) => ({
+          commodityDescription: line.commodity || "",
+          dimensionUnit: line.dimUom || "cm",
+          grossWeight: Number(line.weight) || 0,
+          hazardous: line.dg === "Yes",
+          hazardousClass: "", // Missing in UI
+          height: Number(line.height) || 0,
+          length: Number(line.length) || 0,
+          marksAndNumbers: "", // Missing in UI
+          netWeight: 0, // Missing in UI
+          packageCount: Number(line.qty) || 0,
+          packageType: line.pkgType || "",
+          remarks: line.remarks || "",
+          unNumber: "", // Missing in UI
+          volume: Number(line.volume) || 0,
+          volumeUnit: line.volumeUom === "m³" ? "CBM" : line.volumeUom || "CBM",
+          weightUnit: line.weightUom || "kg",
+          width: Number(line.width) || 0,
+        })),
+
+        equipmentDetails: [
+          {
+            containerNumber: "",
+            containerType: form.equipment?.containerType || "",
+            equipmentSize: "", // Missing in UI
+            equipmentType: form.equipment?.equipPref || "",
+            humidityRequired: false, // Missing in UI
+            humidityValue: 0, // Missing in UI
+            isoCode: "", // Missing in UI
+            quantity: Number(form.equipment?.containerQty) || 0,
+            remarks: "",
+            specialEquipment: false,
+            temperatureMax: 0,
+            temperatureMin: 0,
+            temperatureRequired: !!form.equipment?.reeferTemp,
+            ventilationRequired: false,
+            ventilationValue: 0,
+          },
+        ],
+
+        commercialDetails: [
+          {
+            buyCurrency: form.commercial?.buyCurrency || "USD",
+            buyRate: Number(form.commercial?.buyRate) || 0,
+            commercialRemarks: form.commercial?.remarks || "",
+            creditCheckStatus: "Approved",
+            freightPaymentTerms: form.commercial?.freightTerms || "",
+            paymentTerms: form.commercial?.paymentTerms || "",
+            quotationReference: form.commercial?.quotationRef || "",
+            sellCurrency: form.commercial?.sellCurrency || "USD",
+            sellRate: Number(form.commercial?.sellRate) || 0,
+          },
+        ],
+
+        instructionDetails: [
+          {
+            commercialInvoice: "",
+            customerReferenceDocument: "",
+            dangerousGoodsDocument: "", // Not required anymore
+            deliveryInstructions: form.docs?.deliveryInstructions || "",
+            internalRemarks: form.docs?.internalRemarks || "",
+            packingList: "",
+            pickupInstructions: form.docs?.pickupInstructions || "",
+          },
+        ],
+      };
+
+      // ✅ Only include `id` when updating an existing booking
+      if (isUpdate) apiPayload.id = form.id;
+
+      // ✅ Extract actual File objects from the form state
+      // Existing server-side files have file: null, so they are skipped
+      const filesToUpload = (form.docs?.files || [])
+        .map((f) => f.file)
+        .filter(Boolean);
+
+      // ✅ Call API using FormData
+      const res = await BookingAPI.createUpdateBooking(
+        apiPayload,
+        filesToUpload,
       );
-      return applySaved(saved);
+      const body = res?.data ?? res;
+
+      if (!body?.status && body?.statusFlag !== "Ok") {
+        throw new Error(
+          body?.paramObjectsMap?.message || "Failed to save booking",
+        );
+      }
+
+      const serverId =
+        body?.paramObjectsMap?.bookingId || form.id || Math.max(0, 0) + 1;
+      const serverBookingNo =
+        body?.paramObjectsMap?.bookingNo ||
+        form.bookingNo ||
+        `BKG/26-27/${String(serverId).padStart(4, "0")}`;
+
+      const savedData = {
+        ...form,
+        id: serverId,
+        bookingNo: serverBookingNo,
+        status: apiPayload.bookingStatus,
+      };
+
+      const next = applySaved(savedData);
+
+      onNotify?.(
+        action === "submit"
+          ? `Booking ${next.bookingNo} submitted for approval.`
+          : `Draft saved as ${next.bookingNo}.`,
+      );
+
+      return next;
     } catch (err) {
+      console.error(err);
       setNotice({
         type: "error",
-        text: err?.message || "Unable to save booking. Please try again.",
+        text:
+          err?.response?.data?.paramObjectsMap?.message ||
+          err?.message ||
+          "Unable to save booking. Please try again.",
       });
       return null;
     } finally {
@@ -1087,18 +1405,12 @@ const BookingForm = ({ editData, onBack, onSave, onNotify }) => {
   };
 
   const handleSaveDraft = async () => {
-    const saved = await runSave("draft");
-    if (saved)
-      setNotice({
-        type: "success",
-        text: `Draft saved as ${saved.bookingNo}.`,
-      });
+    await runSave("draft");
   };
 
   const handleSubmit = async () => {
     const saved = await runSave("submit");
     if (saved) {
-      onNotify?.(`Booking ${saved.bookingNo} submitted for approval.`);
       onBack();
     }
   };
@@ -1110,7 +1422,6 @@ const BookingForm = ({ editData, onBack, onSave, onNotify }) => {
     setForm(fresh);
     savedRef.current = fresh;
     baselineRef.current = snapshot(fresh);
-    requestIdRef.current = uid();
     salesTouched.current = false;
     setErrorList([]);
     setExpanded({});
@@ -1143,7 +1454,6 @@ const BookingForm = ({ editData, onBack, onSave, onNotify }) => {
     const saved = await runSave("draft");
     if (saved) {
       setModal(null);
-      onNotify?.(`Draft ${saved.bookingNo} saved.`);
       onBack();
     } else {
       setModal(null);
@@ -1165,8 +1475,7 @@ const BookingForm = ({ editData, onBack, onSave, onNotify }) => {
     setForm(copy);
     const blank = emptyForm();
     savedRef.current = blank;
-    baselineRef.current = snapshot(blank); // copy counts as unsaved
-    requestIdRef.current = uid();
+    baselineRef.current = snapshot(blank);
     setErrorList([]);
     setNotice({
       type: "success",
@@ -1184,28 +1493,30 @@ const BookingForm = ({ editData, onBack, onSave, onNotify }) => {
       const extra =
         status === "Carrier Confirmed"
           ? {
+            carrier: values.carrier || form.carrier,
+            carrierConfirmation: {
               carrier: values.carrier || form.carrier,
-              carrierConfirmation: {
-                carrier: values.carrier || form.carrier,
-                reference: values.reference,
-                etd: values.etd,
-                eta: values.eta,
-                evidence: values.evidence,
-                at: new Date().toISOString(),
-                by: CURRENT_USER.name,
-              },
-            }
+              reference: values.reference,
+              etd: values.etd,
+              eta: values.eta,
+              evidence: values.evidence,
+              at: new Date().toISOString(),
+              by: CURRENT_USER.name,
+            },
+          }
           : {};
-      const saved = await onSave(
-        { ...form, ...extra, clientRequestId: requestIdRef.current, status },
-        { action: "status", label, note },
-      );
-      applySaved(saved);
-      setModal(null);
-      setNotice({
-        type: "success",
-        text: `${label}. Status is now ${status}.`,
-      });
+
+      setForm((p) => ({ ...p, ...extra, status }));
+
+      const saved = await runSave("draft");
+
+      if (saved) {
+        setModal(null);
+        setNotice({
+          type: "success",
+          text: `${label}. Status is now ${status}.`,
+        });
+      }
     } catch (err) {
       setNotice({
         type: "error",
@@ -1426,6 +1737,21 @@ const BookingForm = ({ editData, onBack, onSave, onNotify }) => {
 
   const shownErrors = errorList.slice(0, 8);
 
+  /* ---------- loading gate ---------- */
+  if (loadingDocId || recordLoading) {
+    return (
+      <div className="flex h-[90dvh] w-full items-center justify-center bg-slate-50 dark:bg-gray-950">
+        <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-gray-300">
+          <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+          </svg>
+          Loading booking...
+        </div>
+      </div>
+    );
+  }
+
   /* ---------- render ---------- */
   return (
     <div className="min-h-screen w-full bg-slate-50 dark:bg-gray-900">
@@ -1462,7 +1788,15 @@ const BookingForm = ({ editData, onBack, onSave, onNotify }) => {
             </div>
           </div>
 
-          <fieldset disabled={!editable} className="flex flex-wrap gap-2">
+          <fieldset className="flex flex-wrap gap-2">
+            <TextField
+              label="Booking No"
+              value={form.bookingNo}
+              placeholder={loadingDocId ? "Loading..." : "Auto-generated"}
+              disabled
+              error={errors.bookingNo}
+              className="w-[180px]"
+            />
             <TextField
               label="Booking Date"
               required
@@ -1471,7 +1805,6 @@ const BookingForm = ({ editData, onBack, onSave, onNotify }) => {
               value={form.bookingDate}
               onChange={(v) => set("bookingDate", v)}
               error={errors.bookingDate}
-              disabled={!CURRENT_USER.canEditBookingDate || !editable}
             />
             <SelectField
               label="Branch"
@@ -1498,11 +1831,10 @@ const BookingForm = ({ editData, onBack, onSave, onNotify }) => {
         {notice && (
           <div
             role="status"
-            className={`mb-2 flex items-start justify-between gap-2 rounded-md border px-3 py-2 text-[12px] ${
-              notice.type === "error"
-                ? "border-red-200 bg-red-50 text-red-700 dark:border-red-900/60 dark:bg-red-900/20 dark:text-red-300"
-                : "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-900/20 dark:text-emerald-300"
-            }`}
+            className={`mb-2 flex items-start justify-between gap-2 rounded-md border px-3 py-2 text-[12px] ${notice.type === "error"
+              ? "border-red-200 bg-red-50 text-red-700 dark:border-red-900/60 dark:bg-red-900/20 dark:text-red-300"
+              : "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-900/20 dark:text-emerald-300"
+              }`}
           >
             <span className="flex items-center gap-1.5">
               {notice.type === "error" ? (
@@ -1522,14 +1854,6 @@ const BookingForm = ({ editData, onBack, onSave, onNotify }) => {
           </div>
         )}
 
-        {!editable && (
-          <div className="mb-2 flex items-center gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] text-amber-800 dark:border-amber-900/60 dark:bg-amber-900/20 dark:text-amber-300">
-            <Info size={13} />
-            This booking is {form.status} and locked for editing. Use More
-            Actions to amend, hold or cancel it.
-          </div>
-        )}
-
         {/* Section tabs */}
         <nav
           aria-label="Booking sections"
@@ -1540,11 +1864,10 @@ const BookingForm = ({ editData, onBack, onSave, onNotify }) => {
               key={s.id}
               type="button"
               onClick={() => scrollToSection(s.id)}
-              className={`flex shrink-0 items-center gap-1.5 border-b-2 px-2.5 py-2 text-[11px] font-semibold transition ${
-                activeTab === s.id
-                  ? "border-blue-600 text-blue-700 dark:border-blue-400 dark:text-blue-300"
-                  : "border-transparent text-slate-500 hover:text-slate-800 dark:text-gray-400 dark:hover:text-gray-200"
-              }`}
+              className={`flex shrink-0 items-center gap-1.5 border-b-2 px-2.5 py-2 text-[11px] font-semibold transition ${activeTab === s.id
+                ? "border-blue-600 text-blue-700 dark:border-blue-400 dark:text-blue-300"
+                : "border-transparent text-slate-500 hover:text-slate-800 dark:text-gray-400 dark:hover:text-gray-200"
+                }`}
             >
               <s.icon size={13} />
               {i + 1}. {s.title}
@@ -1556,7 +1879,7 @@ const BookingForm = ({ editData, onBack, onSave, onNotify }) => {
         </nav>
 
         <div className="grid grid-cols-1 items-start gap-2 lg:grid-cols-[minmax(0,1fr)_280px]">
-          <fieldset disabled={!editable} className="min-w-0 space-y-2">
+          <fieldset className="min-w-0 space-y-2">
             {/* 1. Booking Details */}
             <Section
               id="details"
@@ -2104,11 +2427,10 @@ const BookingForm = ({ editData, onBack, onSave, onNotify }) => {
                                           onClick={() =>
                                             toggleHandling(l.id, h)
                                           }
-                                          className={`rounded-full border px-2.5 py-0.5 text-[10px] font-semibold transition ${
-                                            on
-                                              ? "border-blue-500 bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-300"
-                                              : "border-slate-300 bg-white text-slate-600 hover:border-slate-400 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300"
-                                          }`}
+                                          className={`rounded-full border px-2.5 py-0.5 text-[10px] font-semibold transition ${on
+                                            ? "border-blue-500 bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-300"
+                                            : "border-slate-300 bg-white text-slate-600 hover:border-slate-400 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300"
+                                            }`}
                                         >
                                           {h}
                                         </button>
@@ -2125,15 +2447,6 @@ const BookingForm = ({ editData, onBack, onSave, onNotify }) => {
                                   }
                                   placeholder="Additional handling instructions"
                                 />
-                                {(l.dg === "Yes" || l.reefer === "Yes") && (
-                                  <p className="mt-2 flex items-center gap-1.5 text-[10px] text-amber-700 dark:text-amber-300">
-                                    <AlertTriangle size={11} />
-                                    {l.dg === "Yes" &&
-                                      "Upload DG documents under Documents & Instructions. "}
-                                    {l.reefer === "Yes" &&
-                                      "Enter the reefer temperature in Equipment Details."}
-                                  </p>
-                                )}
                               </td>
                             </tr>
                           )}
@@ -2150,9 +2463,8 @@ const BookingForm = ({ editData, onBack, onSave, onNotify }) => {
               )}
 
               <div
-                className={`mt-2.5 grid grid-cols-1 gap-2 sm:grid-cols-2 ${
-                  form.mode === "Air" ? "lg:grid-cols-4" : "lg:grid-cols-3"
-                }`}
+                className={`mt-2.5 grid grid-cols-1 gap-2 sm:grid-cols-2 ${form.mode === "Air" ? "lg:grid-cols-4" : "lg:grid-cols-3"
+                  }`}
               >
                 {[
                   ["Total Packages", totals.packageText],
@@ -2166,13 +2478,13 @@ const BookingForm = ({ editData, onBack, onSave, onNotify }) => {
                   ],
                   ...(form.mode === "Air"
                     ? [
-                        [
-                          "Chargeable Weight (est.)",
-                          totals.chargeableKg
-                            ? `${fmtNum(totals.chargeableKg, 1)} kg`
-                            : "-",
-                        ],
-                      ]
+                      [
+                        "Chargeable Weight (est.)",
+                        totals.chargeableKg
+                          ? `${fmtNum(totals.chargeableKg, 1)} kg`
+                          : "-",
+                      ],
+                    ]
                     : []),
                 ].map(([label, value]) => (
                   <div
@@ -2439,11 +2751,10 @@ const BookingForm = ({ editData, onBack, onSave, onNotify }) => {
                       setDragOver(false);
                       addFiles(e.dataTransfer.files);
                     }}
-                    className={`mt-2 flex flex-col items-center justify-center rounded-lg border-2 border-dashed px-3 py-5 text-center transition ${
-                      dragOver
-                        ? "border-blue-500 bg-blue-50 dark:bg-blue-500/10"
-                        : "border-slate-300 bg-slate-50/60 dark:border-gray-700 dark:bg-gray-900/40"
-                    }`}
+                    className={`mt-2 flex flex-col items-center justify-center rounded-lg border-2 border-dashed px-3 py-5 text-center transition ${dragOver
+                      ? "border-blue-500 bg-blue-50 dark:bg-blue-500/10"
+                      : "border-slate-300 bg-slate-50/60 dark:border-gray-700 dark:bg-gray-900/40"
+                      }`}
                   >
                     <Upload
                       size={18}
@@ -2475,21 +2786,6 @@ const BookingForm = ({ editData, onBack, onSave, onNotify }) => {
                     />
                   </div>
 
-                  {errors["docs.dg"] && (
-                    <p className="mt-1 text-[10px] text-red-500">
-                      {errors["docs.dg"]}
-                    </p>
-                  )}
-                  {hasDG &&
-                    !errors["docs.dg"] &&
-                    !form.docs.files.some(
-                      (f) => f.category === "DG Documents",
-                    ) && (
-                      <p className="mt-1 text-[10px] text-amber-700 dark:text-amber-300">
-                        Dangerous goods selected: upload DG Documents before
-                        submitting.
-                      </p>
-                    )}
                   {uploadMsgs.length > 0 && (
                     <ul className="mt-1 space-y-0.5 text-[10px] text-red-500">
                       {uploadMsgs.map((m) => (
@@ -2511,11 +2807,27 @@ const BookingForm = ({ editData, onBack, onSave, onNotify }) => {
                               className="shrink-0 text-slate-400"
                             />
                             <div className="min-w-0">
-                              <p className="truncate text-[11px] font-medium text-slate-800 dark:text-gray-100">
-                                {f.name}
-                              </p>
+                              {f.url ? (
+                                <a
+                                  href={f.url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  title={f.name}
+                                  className="block truncate text-[11px] font-medium text-blue-600 underline hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
+                                >
+                                  {f.name}
+                                </a>
+                              ) : (
+                                <p
+                                  className="truncate text-[11px] font-medium text-slate-800 dark:text-gray-100"
+                                  title={f.name}
+                                >
+                                  {f.name}
+                                </p>
+                              )}
                               <p className="text-[10px] text-slate-500 dark:text-gray-400">
                                 {f.category} · {fmtSize(f.size)}
+                                {f.isExisting && " · uploaded"}
                               </p>
                             </div>
                           </div>
@@ -2633,41 +2945,38 @@ const BookingForm = ({ editData, onBack, onSave, onNotify }) => {
                   return (
                     <li
                       key={s.status}
-                      className={`flex items-start gap-2 rounded-md px-2 py-1.5 ${
-                        current ? "bg-blue-50 dark:bg-blue-500/10" : ""
-                      }`}
+                      className={`flex items-start gap-2 rounded-md px-2 py-1.5 ${current ? "bg-blue-50 dark:bg-blue-500/10" : ""
+                        }`}
                     >
                       <span
-                        className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${
-                          current
-                            ? "bg-blue-600 text-white"
-                            : done
-                              ? "bg-emerald-500 text-white"
-                              : "bg-slate-100 text-slate-400 dark:bg-gray-800"
-                        }`}
+                        className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${current
+                          ? "bg-blue-600 text-white"
+                          : done
+                            ? "bg-emerald-500 text-white"
+                            : "bg-slate-100 text-slate-400 dark:bg-gray-800"
+                          }`}
                       >
                         {done ? <Check size={11} /> : i + 1}
                       </span>
                       <span className="min-w-0">
                         <span
-                          className={`block text-[11px] font-semibold ${
-                            current
-                              ? "text-blue-700 dark:text-blue-300"
-                              : "text-slate-700 dark:text-gray-200"
-                          }`}
+                          className={`block text-[11px] font-semibold ${current
+                            ? "text-blue-700 dark:text-blue-300"
+                            : "text-slate-700 dark:text-gray-200"
+                            }`}
                         >
                           {s.label}
                         </span>
                         <span className="block text-[10px] text-slate-500 dark:text-gray-400">
                           {s.status === "Carrier Confirmed" &&
-                          form.carrierConfirmation?.reference
+                            form.carrierConfirmation?.reference
                             ? `Ref ${form.carrierConfirmation.reference}`
                             : current && s.status === "Draft"
                               ? s.sub
                               : s.sub.replace(
-                                  "Current status / editable",
-                                  "Editable booking",
-                                )}
+                                "Current status / editable",
+                                "Editable booking",
+                              )}
                         </span>
                       </span>
                     </li>
@@ -2783,11 +3092,10 @@ const BookingForm = ({ editData, onBack, onSave, onNotify }) => {
                           setMenuOpen(false);
                           m.onClick();
                         }}
-                        className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-[12px] hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:hover:bg-gray-800 ${
-                          m.danger
-                            ? "text-red-600 dark:text-red-400"
-                            : "text-slate-700 dark:text-gray-200"
-                        }`}
+                        className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-[12px] hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:hover:bg-gray-800 ${m.danger
+                          ? "text-red-600 dark:text-red-400"
+                          : "text-slate-700 dark:text-gray-200"
+                          }`}
                       >
                         {m.icon && <m.icon size={13} />}
                         {m.label}

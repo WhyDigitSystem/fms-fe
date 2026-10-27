@@ -7,6 +7,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ClipboardList,
+  Clock,
   FileText,
   MapPin,
   Pencil,
@@ -16,15 +17,12 @@ import {
   Ship,
   Truck,
   X,
-  Clock,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import {
   STATUSES,
   computeTotals,
-  customers,
   fmtNum,
-  locationByCode,
   statusDots,
   statusStyles,
 } from "./bookingData";
@@ -70,27 +68,61 @@ const SelectBox = ({ value, onChange, options, label, className = "" }) => (
 );
 
 const LocationCell = ({ code }) => {
-  const loc = locationByCode(code);
+  const displayName = code || "-";
   return (
     <>
       <p
         className="truncate font-medium text-slate-700 dark:text-gray-100"
-        title={loc ? loc.name : ""}
+        title={displayName}
       >
-        {loc ? loc.name : "-"}
+        {displayName}
       </p>
       <p className="mt-0.5 flex items-center gap-1 truncate text-[10px] text-slate-500 dark:text-gray-400">
         <MapPin size={10} className="shrink-0" />
-        <span className="truncate">
-          {loc ? `${loc.code} · ${loc.type}` : "Not selected"}
-        </span>
+        <span className="truncate">Mapped Location</span>
       </p>
     </>
   );
 };
 
-const BookingList = ({
+// Safely map API data to flat row structure
+const mapApiToRow = (item) => {
+  if (item.bookingNo !== undefined) return item; // avoid double-mapping
+
+  const cargo = item.cargoDetails?.[0] || {};
+  const routing = item.routingDetails?.[0] || {};
+
+  return {
+    ...item,
+    id: item.id,
+    bookingNo: item.docId || "",
+    bookingDate: item.docDate || "",
+    customer: item.customer || "", // Using raw string from API
+    bookingType: item.bookingType || "Export",
+    mode: item.transportMode || "Sea",
+    serviceType: item.serviceType || "",
+    origin: routing.origin || "",
+    destination: routing.destination || "",
+    etd: routing.requestedETD || "",
+    status: item.bookingStatus || "Draft",
+    customerRef: item.customerReference || "",
+
+    cargoLines: [
+      {
+        qty: Number(cargo.packageCount) || 0,
+        weight: Number(cargo.grossWeight) || 0,
+        weightUom: String(cargo.weightUnit || "kg").toLowerCase(),
+        volume: Number(cargo.volume) || 0,
+        volumeUom: String(cargo.volumeUnit || "m³"),
+        pkgType: cargo.packageType || "",
+      },
+    ],
+  };
+};
+
+const Bookinglist = ({
   bookings = [],
+  loading = false,
   onAddNew,
   onEdit,
   onBack,
@@ -103,29 +135,28 @@ const BookingList = ({
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
-  const customerName = (id) => customers.find((c) => c.id === id)?.name || "";
+  // Map API data to flat structure
+  const rows = useMemo(() => bookings.map(mapApiToRow), [bookings]);
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
 
-    return bookings.filter((item) => {
+    return rows.filter((item) => {
       const matchesSearch = [
         item.bookingNo,
         item.bookingDate,
-        customerName(item.customer),
+        item.customer,
         item.customerRef,
         item.bookingType,
         item.mode,
         item.serviceType,
         item.origin,
-        locationByCode(item.origin)?.name,
         item.destination,
-        locationByCode(item.destination)?.name,
         item.status,
       ].some((value) =>
         String(value || "")
           .toLowerCase()
-          .includes(term),
+          .includes(term)
       );
 
       return (
@@ -134,11 +165,12 @@ const BookingList = ({
         (statusFilter === "All" || item.status === statusFilter)
       );
     });
-  }, [bookings, search, modeFilter, statusFilter]);
+  }, [rows, search, modeFilter, statusFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const startIndex = (currentPage - 1) * pageSize;
   const currentItems = filtered.slice(startIndex, startIndex + pageSize);
+  console.log("🟢 BookingList rendering. Current page:", currentPage, "Page size:", pageSize, "Total pages:", totalPages, "Filtered items:", filtered.length, "Current items:", currentItems.length);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -154,36 +186,24 @@ const BookingList = ({
     return () => clearTimeout(t);
   }, [toast, onDismissToast]);
 
-  const count = (...statuses) =>
-    bookings.filter((b) => statuses.includes(b.status)).length;
-
   const stats = [
     {
       label: "Total Bookings",
-      value: bookings.length,
+      value: rows.length,
       icon: ClipboardList,
       color: "text-blue-600 bg-blue-50 dark:bg-blue-500/10 dark:text-blue-400",
     },
     {
-      label: "Drafts",
-      value: count("Draft", "Amendment Pending"),
-      icon: FileText,
-      color:
-        "text-slate-600 bg-slate-100 dark:bg-gray-700/50 dark:text-gray-300",
-    },
-    {
       label: "In Progress",
-      value: count("Submitted", "Pending Carrier Confirmation", "On Hold"),
+      value: rows.filter((b) => ["Submitted", "Pending Carrier Confirmation", "On Hold"].includes(b.status)).length,
       icon: Clock,
-      color:
-        "text-amber-600 bg-amber-50 dark:bg-amber-500/10 dark:text-amber-400",
+      color: "text-amber-600 bg-amber-50 dark:bg-amber-500/10 dark:text-amber-400",
     },
     {
       label: "Carrier Confirmed",
-      value: count("Carrier Confirmed"),
+      value: rows.filter((b) => b.status === "Carrier Confirmed").length,
       icon: CheckCircle2,
-      color:
-        "text-emerald-600 bg-emerald-50 dark:bg-emerald-500/10 dark:text-emerald-400",
+      color: "text-emerald-600 bg-emerald-50 dark:bg-emerald-500/10 dark:text-emerald-400",
     },
   ];
 
@@ -200,7 +220,6 @@ const BookingList = ({
             >
               <ArrowLeft size={15} />
             </button>
-
             <div>
               <div className="flex flex-wrap items-center gap-2">
                 <h1 className="text-base font-bold leading-tight text-slate-900 dark:text-white sm:text-lg">
@@ -242,7 +261,7 @@ const BookingList = ({
           </div>
         )}
 
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
           {stats.map(({ label, value, icon: Icon, color }) => (
             <div
               key={label}
@@ -275,7 +294,6 @@ const BookingList = ({
                 View and manage all freight bookings.
               </p>
             </div>
-
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <div className="relative min-w-0 sm:w-64">
                 <Search
@@ -306,7 +324,7 @@ const BookingList = ({
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
                 label="Filter by status"
-                className="sm:w-48"
+                className="sm:w-40"
                 options={["All", ...STATUSES].map((value) => ({
                   value,
                   label: value === "All" ? "All statuses" : value,
@@ -331,125 +349,121 @@ const BookingList = ({
               </thead>
 
               <tbody className="divide-y divide-slate-100 dark:divide-gray-700/50">
-                {currentItems.map((item) => {
-                  const ModeIcon = modeIcons[item.mode] || Ship;
-                  const status = item.status || "Draft";
-                  const totals = computeTotals(item.cargoLines);
-                  const name = customerName(item.customer);
+                {loading ? (
+                  <tr>
+                    <td colSpan={headings.length} className="px-3 py-10 text-center text-gray-500">
+                      Loading bookings...
+                    </td>
+                  </tr>
+                ) : (
+                  currentItems.map((item) => {
+                    const ModeIcon = modeIcons[item.mode] || Ship;
+                    const status = item.status || "Draft";
+                    const totals = computeTotals(item.cargoLines);
 
-                  return (
-                    <tr
-                      key={item.id ?? item.bookingNo}
-                      className="transition hover:bg-slate-50/80 dark:hover:bg-gray-800/60"
-                    >
-                      <td className="whitespace-nowrap px-3 py-2 align-middle">
-                        <span className="font-semibold text-blue-700 dark:text-blue-400">
-                          {item.bookingNo || "-"}
-                        </span>
-                      </td>
+                    return (
+                      <tr
+                        key={item.id ?? item.docId}
+                        className="transition hover:bg-slate-50/80 dark:hover:bg-gray-800/60"
+                      >
+                        <td className="whitespace-nowrap px-3 py-2 align-middle">
+                          <span className="font-semibold text-blue-700 dark:text-blue-400">
+                            {item.docId || "-"}
+                          </span>
+                        </td>
 
-                      <td className="whitespace-nowrap px-3 py-2 align-middle text-slate-600 dark:text-gray-300">
-                        {item.bookingDate || "-"}
-                      </td>
+                        <td className="whitespace-nowrap px-3 py-2 align-middle text-slate-600 dark:text-gray-300">
+                          {item.bookingDate || "-"}
+                        </td>
 
-                      <td className="max-w-[190px] px-3 py-2 align-middle">
-                        <p
-                          className="truncate font-semibold text-slate-800 dark:text-gray-100"
-                          title={name}
-                        >
-                          {name || "-"}
-                        </p>
-                        {item.customerRef && (
-                          <p className="mt-0.5 truncate text-[10px] text-slate-500 dark:text-gray-400">
-                            Ref: {item.customerRef}
-                          </p>
-                        )}
-                      </td>
-
-                      <td className="whitespace-nowrap px-3 py-2 align-middle">
-                        <span className="inline-flex items-center gap-1 text-slate-600 dark:text-gray-300">
-                          {item.bookingType === "Export" ? (
-                            <ArrowUpRight
-                              size={13}
-                              className="text-emerald-500"
-                            />
-                          ) : item.bookingType === "Import" ? (
-                            <ArrowDownLeft
-                              size={13}
-                              className="text-blue-500"
-                            />
-                          ) : null}
-                          {item.bookingType || "-"}
-                        </span>
-                      </td>
-
-                      <td className="whitespace-nowrap px-3 py-2 align-middle">
-                        <span className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-1.5 py-1 font-medium text-slate-600 dark:border-gray-700 dark:bg-gray-900/50 dark:text-gray-300">
-                          <ModeIcon size={12} />
-                          {item.mode || "-"}
-                        </span>
-                        <p className="mt-0.5 text-[10px] text-slate-500 dark:text-gray-400">
-                          {item.serviceType || "-"}
-                        </p>
-                      </td>
-
-                      <td className="max-w-[190px] px-3 py-2 align-middle">
-                        <LocationCell code={item.origin} />
-                      </td>
-
-                      <td className="max-w-[190px] px-3 py-2 align-middle">
-                        <LocationCell code={item.destination} />
-                      </td>
-
-                      <td className="whitespace-nowrap px-3 py-2 align-middle text-slate-600 dark:text-gray-300">
-                        {item.etd || "-"}
-                      </td>
-
-                      <td className="max-w-[170px] px-3 py-2 align-middle text-slate-600 dark:text-gray-300">
-                        <p className="truncate" title={totals.packageText}>
-                          {totals.packageText}
-                        </p>
-                        <p className="mt-0.5 text-[10px] text-slate-500 dark:text-gray-400">
-                          {totals.weightKg
-                            ? `${fmtNum(totals.weightKg)} kg`
-                            : "-"}
-                          {totals.volumeM3
-                            ? ` · ${fmtNum(totals.volumeM3, 3)} m³`
-                            : ""}
-                        </p>
-                      </td>
-
-                      <td className="whitespace-nowrap px-3 py-2 align-middle">
-                        <span
-                          className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ring-inset ${
-                            statusStyles[status] || statusStyles.Draft
-                          }`}
-                        >
-                          <span
-                            className={`h-1.5 w-1.5 rounded-full ${statusDots[status] || statusDots.Draft}`}
-                          />
-                          {status}
-                        </span>
-                      </td>
-
-                      <td className="px-3 py-2 align-middle">
-                        <div className="flex justify-center">
-                          <button
-                            type="button"
-                            onClick={() => onEdit?.(item)}
-                            className="flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 text-slate-500 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 dark:border-gray-700 dark:text-gray-300 dark:hover:border-blue-500/40 dark:hover:bg-blue-500/10 dark:hover:text-blue-300"
-                            title="Open booking"
-                            aria-label={`Open booking ${item.bookingNo || ""}`}
+                        <td className="max-w-[190px] px-3 py-2 align-middle">
+                          <p
+                            className="truncate font-semibold text-slate-800 dark:text-gray-100"
+                            title={item.customer}
                           >
-                            <Pencil size={13} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
+                            {item.customer || "-"}
+                          </p>
+                          {item.customerRef && (
+                            <p className="mt-0.5 truncate text-[10px] text-slate-500 dark:text-gray-400">
+                              Ref: {item.customerRef}
+                            </p>
+                          )}
+                        </td>
 
-                {currentItems.length === 0 && (
+                        <td className="whitespace-nowrap px-3 py-2 align-middle">
+                          <span className="inline-flex items-center gap-1 text-slate-600 dark:text-gray-300">
+                            {item.bookingType === "Export" ? (
+                              <ArrowUpRight size={13} className="text-emerald-500" />
+                            ) : item.bookingType === "Import" ? (
+                              <ArrowDownLeft size={13} className="text-blue-500" />
+                            ) : null}
+                            {item.bookingType || "-"}
+                          </span>
+                        </td>
+
+                        <td className="whitespace-nowrap px-3 py-2 align-middle">
+                          <span className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-1.5 py-1 font-medium text-slate-600 dark:border-gray-700 dark:bg-gray-900/50 dark:text-gray-300">
+                            <ModeIcon size={12} />
+                            {item.mode || "-"}
+                          </span>
+                          <p className="mt-0.5 text-[10px] text-slate-500 dark:text-gray-400">
+                            {item.serviceType || "-"}
+                          </p>
+                        </td>
+
+                        <td className="max-w-[190px] px-3 py-2 align-middle">
+                          <LocationCell code={item.origin} />
+                        </td>
+
+                        <td className="max-w-[190px] px-3 py-2 align-middle">
+                          <LocationCell code={item.destination} />
+                        </td>
+
+                        <td className="whitespace-nowrap px-3 py-2 align-middle text-slate-600 dark:text-gray-300">
+                          {item.etd || "-"}
+                        </td>
+
+                        <td className="max-w-[170px] px-3 py-2 align-middle text-slate-600 dark:text-gray-300">
+                          <p className="truncate" title={totals.packageText}>
+                            {totals.packageText}
+                          </p>
+                          <p className="mt-0.5 text-[10px] text-slate-500 dark:text-gray-400">
+                            {totals.weightKg ? `${fmtNum(totals.weightKg)} kg` : "-"}
+                            {totals.volumeM3 ? ` · ${fmtNum(totals.volumeM3, 3)} m³` : ""}
+                          </p>
+                        </td>
+
+                        <td className="whitespace-nowrap px-3 py-2 align-middle">
+                          <span
+                            className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ring-inset ${statusStyles[status] || statusStyles.Draft
+                              }`}
+                          >
+                            <span
+                              className={`h-1.5 w-1.5 rounded-full ${statusDots[status] || statusDots.Draft
+                                }`}
+                            />
+                            {status}
+                          </span>
+                        </td>
+
+                        <td className="px-3 py-2 align-middle">
+                          <div className="flex justify-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => onEdit?.(item)}
+                              className="flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 text-slate-500 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 dark:border-gray-700 dark:text-gray-300 dark:hover:border-blue-500/40 dark:hover:bg-blue-500/10 dark:hover:text-blue-300"
+                              title="Edit booking"
+                            >
+                              <Pencil size={13} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+
+                {!loading && currentItems.length === 0 && (
                   <tr>
                     <td colSpan={headings.length} className="px-3 py-10">
                       <div className="flex flex-col items-center text-center">
@@ -474,17 +488,16 @@ const BookingList = ({
             <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500 dark:text-gray-400">
               <span>
                 Showing {filtered.length ? startIndex + 1 : 0}–
-                {Math.min(startIndex + pageSize, filtered.length)} of{" "}
-                {filtered.length}
+                {Math.min(startIndex + pageSize, filtered.length)} of {filtered.length}
               </span>
               <SelectBox
                 value={String(pageSize)}
                 onChange={(e) => setPageSize(Number(e.target.value))}
                 label="Rows per page"
                 className="w-24"
-                options={[5, 10, 20, 50].map((c) => ({
-                  value: String(c),
-                  label: `${c} / page`,
+                options={[5, 10, 20, 50].map((count) => ({
+                  value: String(count),
+                  label: `${count} / page`,
                 }))}
               />
             </div>
@@ -492,9 +505,8 @@ const BookingList = ({
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
                 disabled={currentPage === 1}
-                aria-label="Previous page"
                 className="flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
               >
                 <ChevronLeft size={14} />
@@ -504,11 +516,8 @@ const BookingList = ({
               </span>
               <button
                 type="button"
-                onClick={() =>
-                  setCurrentPage((p) => Math.min(totalPages, p + 1))
-                }
+                onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
                 disabled={currentPage === totalPages}
-                aria-label="Next page"
                 className="flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
               >
                 <ChevronRight size={14} />
@@ -521,4 +530,4 @@ const BookingList = ({
   );
 };
 
-export default BookingList;
+export default Bookinglist;
