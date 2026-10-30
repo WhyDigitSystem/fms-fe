@@ -81,7 +81,7 @@ const useUserManagement = () => {
     userId,
     action,
     userName,
-    actionBy = "admin"
+    actionBy = "admin",
   ) => {
     setLoadingId(userId);
     try {
@@ -108,17 +108,17 @@ const useUserManagement = () => {
           prev.map((user) =>
             user.userId === userId
               ? { ...user, status: action.toUpperCase() }
-              : user
-          )
+              : user,
+          ),
         );
 
         // Show success message (you can replace with toast notification)
         alert(
-          `User ${userName} has been ${action.toLowerCase()} successfully!`
+          `User ${userName} has been ${action.toLowerCase()} successfully!`,
         );
       } else {
         throw new Error(
-          response.paramObjectsMap?.message || "Failed to update user status"
+          response.paramObjectsMap?.message || "Failed to update user status",
         );
       }
     } catch (error) {
@@ -307,7 +307,7 @@ const UserManagement = () => {
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
           <div>
             <h1 className="text-xl font-bold text-gray-900 dark:text-white">
-              User Management
+              User Managementt
             </h1>
             <p className="text-gray-500 dark:text-gray-400 text-xs">
               Manage user access and permissions
@@ -575,7 +575,7 @@ const UserManagement = () => {
               Showing {(pagination.currentPage - 1) * pagination.count + 1} to{" "}
               {Math.min(
                 pagination.currentPage * pagination.count,
-                pagination.totalCount
+                pagination.totalCount,
               )}{" "}
               of {pagination.totalCount} entries
             </div>

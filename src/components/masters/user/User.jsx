@@ -29,10 +29,7 @@ const User = () => {
   return (
     <div>
       {currentView === "list" ? (
-        <UserList
-          onAddNew={handleAddNew}
-          onEdit={handleEdit}
-        />
+        <UserList onAddNew={handleAddNew} onEdit={handleEdit} />
       ) : (
         <UserForm
           onBack={handleBack}

@@ -8,10 +8,9 @@ export const masterAPI = {
   // ---------------------------------------------------------------
   getAllCities: async (orgid) => {
     try {
-      const res = await apiClient.get(
-        "/api/commonmaster/getAllCityByOrgId",
-        { params: { orgid } }
-      );
+      const res = await apiClient.get("/api/commonmaster/getAllCityByOrgId", {
+        params: { orgid },
+      });
       return res?.paramObjectsMap?.cityVO ?? [];
     } catch (error) {
       console.error("Error fetching cities:", error);
@@ -40,14 +39,18 @@ export const masterAPI = {
   },
 
   // ---------------------------------------------------------------
-  // GET cities by state (kept — not in this task but used elsewhere)
+  // GET cities by state
+  // The backend has no /api/commonmaster/city/state endpoint (404),
+  // so load all cities for the org and filter by state id here.
   // ---------------------------------------------------------------
   getCitiesByState: async (orgid, state) => {
     try {
-      const res = await apiClient.get("/api/commonmaster/city/state", {
-        params: { orgid, state },
-      });
-      return res?.paramObjectsMap?.cityVO ?? (Array.isArray(res) ? res : []);
+      const cities = await masterAPI.getAllCities(orgid);
+
+      return cities.filter(
+        (city) =>
+          String(city?.state?.id ?? city?.state ?? "") === String(state),
+      );
     } catch (error) {
       console.error("Error fetching cities by state:", error);
       throw error;
@@ -60,10 +63,9 @@ export const masterAPI = {
   // ---------------------------------------------------------------
   getStateByCountry: async (countryId, orgid) => {
     try {
-      const res = await apiClient.get(
-        "/api/commonmaster/getStateByCountry",
-        { params: { country: countryId, orgid } }
-      );
+      const res = await apiClient.get("/api/commonmaster/getStateByCountry", {
+        params: { country: countryId, orgid },
+      });
       return res?.paramObjectsMap?.stateVO ?? (Array.isArray(res) ? res : []);
     } catch (error) {
       console.error("Error fetching states by country:", error);
@@ -83,7 +85,7 @@ export const masterAPI = {
       console.log("📤 Saving city:", payload);
       const response = await apiClient.put(
         "/api/commonmaster/createUpdateCity",
-        payload
+        payload,
       );
       return response?.data ?? response;
     } catch (error) {

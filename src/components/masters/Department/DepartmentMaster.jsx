@@ -1,11 +1,11 @@
-// CustomerMasterPage.jsx
+// DepartmentMasterPage.jsx
 import { useState } from "react";
 import DepartmentListView from "./DepartmentListView";
 import DepartmentMasterForm from "./DepartmentMasterForm";
 
-const DepartmentMasterPage = () => {
-  const [screen, setScreen] = useState("list");   // list | form
-  const [editData, setEditData] = useState(null); // when editing
+const DepartmentMasterPage = ({ onBack }) => {
+  const [screen, setScreen] = useState("list"); // list | form
+  const [editData, setEditData] = useState(null);
 
   const handleAddNew = () => {
     setEditData(null);
@@ -17,8 +17,9 @@ const DepartmentMasterPage = () => {
     setScreen("form");
   };
 
-  const handleBack = () => {
+  const handleBackToList = () => {
     setScreen("list");
+    setEditData(null);
   };
 
   return (
@@ -27,14 +28,12 @@ const DepartmentMasterPage = () => {
         <DepartmentListView
           onAddNew={handleAddNew}
           onEdit={handleEdit}
+          onBack={onBack || (() => window.history.back())}
         />
       )}
 
       {screen === "form" && (
-        <DepartmentMasterForm
-          editData={editData}
-          onBack={handleBack}
-        />
+        <DepartmentMasterForm editData={editData} onBack={handleBackToList} />
       )}
     </>
   );

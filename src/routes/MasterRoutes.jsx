@@ -22,6 +22,7 @@ import ServiceMaster from "../components/masters/service/ServiceMaster";
 import ProductMaster from "../components/masters/product/ProductMaster";
 import PortMaster from "../components/masters/PortMaster/PortMaster";
 import ModeMaster from "../components/masters/ModeMaster/ModeMaster";
+import Customer from "../components/masters/Customer/Customer";
 
 const masterRoutes = [
   {
@@ -107,6 +108,10 @@ const masterRoutes = [
   {
     path: "currency",
     element: <CurrencyMaster />,
+  },
+  {
+    path: "customer",
+    element: <Customer />,
   },
 ];
 

@@ -175,10 +175,23 @@ const MASTERS = [
     color: "teal",
     screenCode: "CUR",
   },
+  {
+    name: "Customer",
+    icon: Users,
+    path: "/customer",
+    color: "indigo",
+    screenCode: "CUST",
+  },
 ];
 
 // Business Master contains only these items
-const BUSINESS_MASTER_NAMES = ["Product", "Service", "Port", "Mode"];
+const BUSINESS_MASTER_NAMES = [
+  "Product",
+  "Service",
+  "Port",
+  "Mode",
+  "Customer",
+];
 
 // Split the master items into two sections
 const BASIC_MASTER = MASTERS.filter(

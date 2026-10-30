@@ -17,20 +17,25 @@ const CountryMasterForm = ({ data, onBack }) => {
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
-    
+
     // Clear field error when user starts typing
     if (fieldErrors[name]) {
-      setFieldErrors(prev => ({ ...prev, [name]: "" }));
+      setFieldErrors((prev) => ({ ...prev, [name]: "" }));
     }
-    
-    setForm({ ...form, [name]: type === "checkbox" ? checked : value.toUpperCase() });
+
+    setForm({
+      ...form,
+      [name]: type === "checkbox" ? checked : value.toUpperCase(),
+    });
   };
 
   const handleSave = async () => {
     // Basic validation
     const errors = {};
-    if (!form.countryCode.trim()) errors.countryCode = "Country Code is required";
-    if (!form.countryName.trim()) errors.countryName = "Country Name is required";
+    if (!form.countryCode.trim())
+      errors.countryCode = "Country Code is required";
+    if (!form.countryName.trim())
+      errors.countryName = "Country Name is required";
 
     if (Object.keys(errors).length > 0) {
       setFieldErrors(errors);
@@ -56,7 +61,7 @@ const CountryMasterForm = ({ data, onBack }) => {
       console.log("📥 Save Response:", response);
 
       alert(
-        data ? "Country Updated successfully!" : "Country saved successfully!"
+        data ? "Country Updated successfully!" : "Country saved successfully!",
       );
       onBack();
     } catch (error) {
@@ -94,7 +99,7 @@ const CountryMasterForm = ({ data, onBack }) => {
             error={fieldErrors.countryCode}
             required
           />
-          
+
           <FloatingInput
             label="Country Name *"
             name="countryName"
@@ -133,8 +138,8 @@ const CountryMasterForm = ({ data, onBack }) => {
             disabled={isSubmitting}
             className="flex items-center gap-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <Save className="h-3 w-3" /> 
-            {isSubmitting ? "Saving..." : (data ? "Update" : "Save")}
+            <Save className="h-3 w-3" />
+            {isSubmitting ? "Saving..." : data ? "Update" : "Save"}
           </button>
         </div>
       </div>
