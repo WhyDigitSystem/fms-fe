@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import {
+  ArrowLeft,
   Plus,
   Search,
   Pencil,
@@ -19,7 +20,12 @@ const isActive = (item) =>
   item?.active === "Y" ||
   item?.active === 1;
 
-export default function ModeMasterList({ onAdd, onEdit, refreshTrigger }) {
+export default function ModeMasterList({
+  onAdd,
+  onEdit,
+  onBack,
+  refreshTrigger,
+}) {
   const [modes, setModes] = useState([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
@@ -97,14 +103,28 @@ export default function ModeMasterList({ onAdd, onEdit, refreshTrigger }) {
 
   return (
     <div className="mx-auto max-w-6xl rounded-lg bg-gray-50 p-4 dark:bg-gray-900">
+      {/* Header */}
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-semibold text-gray-800 dark:text-white">
-            Mode Master
-          </h2>
-          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-            Manage transport mode codes, names, and descriptions
-          </p>
+        <div className="flex items-center gap-2">
+          {/* Back Button */}
+          <button
+            type="button"
+            onClick={onBack}
+            title="Back"
+            className="rounded-md p-1.5 text-gray-600 transition hover:bg-gray-200 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white"
+          >
+            <ArrowLeft size={20} />
+          </button>
+
+          <div>
+            <h2 className="text-lg font-semibold text-gray-800 dark:text-white">
+              Mode Master
+            </h2>
+
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              Manage transport mode codes, names, and descriptions
+            </p>
+          </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -138,6 +158,7 @@ export default function ModeMasterList({ onAdd, onEdit, refreshTrigger }) {
         </div>
       </div>
 
+      {/* Search */}
       <div className="mb-3 flex items-center gap-2 rounded-md border border-gray-300 bg-white px-3 dark:border-gray-700 dark:bg-gray-800">
         <Search size={15} className="shrink-0 text-gray-400" />
 
@@ -153,6 +174,7 @@ export default function ModeMasterList({ onAdd, onEdit, refreshTrigger }) {
         />
       </div>
 
+      {/* Table */}
       <div className="overflow-x-auto rounded-md border border-gray-200 dark:border-gray-700">
         <table className="w-full border-collapse text-left text-xs">
           <thead className="bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-200">
@@ -239,6 +261,7 @@ export default function ModeMasterList({ onAdd, onEdit, refreshTrigger }) {
         </table>
       </div>
 
+      {/* Pagination */}
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-gray-500 dark:text-gray-400">
         <span>
           Showing{" "}

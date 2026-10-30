@@ -60,6 +60,7 @@ const SelectBox = ({ value, onChange, options, label, className = "" }) => (
         </option>
       ))}
     </select>
+
     <ChevronDown
       size={13}
       className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400"
@@ -69,6 +70,7 @@ const SelectBox = ({ value, onChange, options, label, className = "" }) => (
 
 const LocationCell = ({ code }) => {
   const displayName = code || "-";
+
   return (
     <>
       <p
@@ -77,6 +79,7 @@ const LocationCell = ({ code }) => {
       >
         {displayName}
       </p>
+
       <p className="mt-0.5 flex items-center gap-1 truncate text-[10px] text-slate-500 dark:text-gray-400">
         <MapPin size={10} className="shrink-0" />
         <span className="truncate">Mapped Location</span>
@@ -87,7 +90,7 @@ const LocationCell = ({ code }) => {
 
 // Safely map API data to flat row structure
 const mapApiToRow = (item) => {
-  if (item.bookingNo !== undefined) return item; // avoid double-mapping
+  if (item.bookingNo !== undefined) return item;
 
   const cargo = item.cargoDetails?.[0] || {};
   const routing = item.routingDetails?.[0] || {};
@@ -97,7 +100,7 @@ const mapApiToRow = (item) => {
     id: item.id,
     bookingNo: item.docId || "",
     bookingDate: item.docDate || "",
-    customer: item.customer || "", // Using raw string from API
+    customer: item.customer || "",
     bookingType: item.bookingType || "Export",
     mode: item.transportMode || "Sea",
     serviceType: item.serviceType || "",
@@ -135,6 +138,15 @@ const Bookinglist = ({
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
+  // Back Navigation
+  const handleBack = () => {
+    if (onBack) {
+      onBack();
+    } else {
+      window.history.back();
+    }
+  };
+
   // Map API data to flat structure
   const rows = useMemo(() => bookings.map(mapApiToRow), [bookings]);
 
@@ -156,7 +168,7 @@ const Bookinglist = ({
       ].some((value) =>
         String(value || "")
           .toLowerCase()
-          .includes(term)
+          .includes(term),
       );
 
       return (
@@ -170,19 +182,35 @@ const Bookinglist = ({
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const startIndex = (currentPage - 1) * pageSize;
   const currentItems = filtered.slice(startIndex, startIndex + pageSize);
-  console.log("🟢 BookingList rendering. Current page:", currentPage, "Page size:", pageSize, "Total pages:", totalPages, "Filtered items:", filtered.length, "Current items:", currentItems.length);
+
+  console.log(
+    "🟢 BookingList rendering. Current page:",
+    currentPage,
+    "Page size:",
+    pageSize,
+    "Total pages:",
+    totalPages,
+    "Filtered items:",
+    filtered.length,
+    "Current items:",
+    currentItems.length,
+  );
 
   useEffect(() => {
     setCurrentPage(1);
   }, [search, modeFilter, statusFilter, pageSize]);
 
   useEffect(() => {
-    if (currentPage > totalPages) setCurrentPage(totalPages);
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
   }, [currentPage, totalPages]);
 
   useEffect(() => {
     if (!toast) return undefined;
+
     const t = setTimeout(() => onDismissToast?.(), 5000);
+
     return () => clearTimeout(t);
   }, [toast, onDismissToast]);
 
@@ -195,40 +223,51 @@ const Bookinglist = ({
     },
     {
       label: "In Progress",
-      value: rows.filter((b) => ["Submitted", "Pending Carrier Confirmation", "On Hold"].includes(b.status)).length,
+      value: rows.filter((b) =>
+        ["Submitted", "Pending Carrier Confirmation", "On Hold"].includes(
+          b.status,
+        ),
+      ).length,
       icon: Clock,
-      color: "text-amber-600 bg-amber-50 dark:bg-amber-500/10 dark:text-amber-400",
+      color:
+        "text-amber-600 bg-amber-50 dark:bg-amber-500/10 dark:text-amber-400",
     },
     {
       label: "Carrier Confirmed",
       value: rows.filter((b) => b.status === "Carrier Confirmed").length,
       icon: CheckCircle2,
-      color: "text-emerald-600 bg-emerald-50 dark:bg-emerald-500/10 dark:text-emerald-400",
+      color:
+        "text-emerald-600 bg-emerald-50 dark:bg-emerald-500/10 dark:text-emerald-400",
     },
   ];
 
   return (
     <div className="min-h-screen w-full bg-slate-50 dark:bg-gray-900">
       <div className="w-full space-y-2 p-3 sm:p-4 lg:px-5 lg:py-3">
+        {/* Header */}
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={onBack}
+              onClick={handleBack}
               aria-label="Go back"
+              title="Back"
               className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-600 transition hover:bg-slate-100 dark:border-gray-700 dark:bg-gray-800/40 dark:text-gray-300 dark:hover:bg-gray-800"
             >
               <ArrowLeft size={15} />
             </button>
+
             <div>
               <div className="flex flex-wrap items-center gap-2">
                 <h1 className="text-base font-bold leading-tight text-slate-900 dark:text-white sm:text-lg">
                   Booking Management
                 </h1>
+
                 <span className="rounded-md bg-blue-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-blue-700 dark:bg-blue-500/10 dark:text-blue-300">
                   Operations
                 </span>
               </div>
+
               <p className="mt-0.5 text-[10px] text-slate-500 dark:text-gray-400">
                 Capture customer bookings, validate them and submit for approval
                 or carrier confirmation.
@@ -246,6 +285,7 @@ const Bookinglist = ({
           </button>
         </div>
 
+        {/* Toast */}
         {toast && (
           <div
             role="status"
@@ -255,12 +295,14 @@ const Bookinglist = ({
               <CheckCircle2 size={13} />
               {toast}
             </span>
+
             <button type="button" onClick={onDismissToast} aria-label="Dismiss">
               <X size={13} />
             </button>
           </div>
         )}
 
+        {/* Statistics */}
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
           {stats.map(({ label, value, icon: Icon, color }) => (
             <div
@@ -271,10 +313,12 @@ const Bookinglist = ({
                 <p className="text-[11px] font-medium text-slate-500 dark:text-gray-400">
                   {label}
                 </p>
+
                 <p className="mt-1 text-lg font-bold leading-none text-slate-900 dark:text-white">
                   {value}
                 </p>
               </div>
+
               <div
                 className={`flex h-8 w-8 items-center justify-center rounded-md ${color}`}
               >
@@ -284,22 +328,27 @@ const Bookinglist = ({
           ))}
         </div>
 
+        {/* Booking Register */}
         <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm dark:border-gray-700/60 dark:bg-gray-800/40">
+          {/* Search and Filters */}
           <div className="flex flex-col gap-2 border-b border-slate-100 px-3 py-2 dark:border-gray-700/60 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <h2 className="text-xs font-semibold text-slate-900 dark:text-white">
                 Booking Register
               </h2>
+
               <p className="mt-0.5 text-[10px] text-slate-500 dark:text-gray-400">
                 View and manage all freight bookings.
               </p>
             </div>
+
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <div className="relative min-w-0 sm:w-64">
                 <Search
                   size={14}
                   className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400"
                 />
+
                 <input
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
@@ -333,6 +382,7 @@ const Bookinglist = ({
             </div>
           </div>
 
+          {/* Table */}
           <div className="overflow-x-auto">
             <table className="w-full min-w-[1200px] text-left text-[11px]">
               <thead>
@@ -351,7 +401,10 @@ const Bookinglist = ({
               <tbody className="divide-y divide-slate-100 dark:divide-gray-700/50">
                 {loading ? (
                   <tr>
-                    <td colSpan={headings.length} className="px-3 py-10 text-center text-gray-500">
+                    <td
+                      colSpan={headings.length}
+                      className="px-3 py-10 text-center text-gray-500"
+                    >
                       Loading bookings...
                     </td>
                   </tr>
@@ -383,6 +436,7 @@ const Bookinglist = ({
                           >
                             {item.customer || "-"}
                           </p>
+
                           {item.customerRef && (
                             <p className="mt-0.5 truncate text-[10px] text-slate-500 dark:text-gray-400">
                               Ref: {item.customerRef}
@@ -393,10 +447,17 @@ const Bookinglist = ({
                         <td className="whitespace-nowrap px-3 py-2 align-middle">
                           <span className="inline-flex items-center gap-1 text-slate-600 dark:text-gray-300">
                             {item.bookingType === "Export" ? (
-                              <ArrowUpRight size={13} className="text-emerald-500" />
+                              <ArrowUpRight
+                                size={13}
+                                className="text-emerald-500"
+                              />
                             ) : item.bookingType === "Import" ? (
-                              <ArrowDownLeft size={13} className="text-blue-500" />
+                              <ArrowDownLeft
+                                size={13}
+                                className="text-blue-500"
+                              />
                             ) : null}
+
                             {item.bookingType || "-"}
                           </span>
                         </td>
@@ -406,6 +467,7 @@ const Bookinglist = ({
                             <ModeIcon size={12} />
                             {item.mode || "-"}
                           </span>
+
                           <p className="mt-0.5 text-[10px] text-slate-500 dark:text-gray-400">
                             {item.serviceType || "-"}
                           </p>
@@ -427,21 +489,29 @@ const Bookinglist = ({
                           <p className="truncate" title={totals.packageText}>
                             {totals.packageText}
                           </p>
+
                           <p className="mt-0.5 text-[10px] text-slate-500 dark:text-gray-400">
-                            {totals.weightKg ? `${fmtNum(totals.weightKg)} kg` : "-"}
-                            {totals.volumeM3 ? ` · ${fmtNum(totals.volumeM3, 3)} m³` : ""}
+                            {totals.weightKg
+                              ? `${fmtNum(totals.weightKg)} kg`
+                              : "-"}
+                            {totals.volumeM3
+                              ? ` · ${fmtNum(totals.volumeM3, 3)} m³`
+                              : ""}
                           </p>
                         </td>
 
                         <td className="whitespace-nowrap px-3 py-2 align-middle">
                           <span
-                            className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ring-inset ${statusStyles[status] || statusStyles.Draft
-                              }`}
+                            className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ring-inset ${
+                              statusStyles[status] || statusStyles.Draft
+                            }`}
                           >
                             <span
-                              className={`h-1.5 w-1.5 rounded-full ${statusDots[status] || statusDots.Draft
-                                }`}
+                              className={`h-1.5 w-1.5 rounded-full ${
+                                statusDots[status] || statusDots.Draft
+                              }`}
                             />
+
                             {status}
                           </span>
                         </td>
@@ -470,9 +540,11 @@ const Bookinglist = ({
                         <span className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-400 dark:bg-gray-900 dark:text-gray-500">
                           <Search size={18} />
                         </span>
+
                         <p className="mt-2 text-xs font-medium text-slate-700 dark:text-gray-200">
                           No bookings found
                         </p>
+
                         <p className="mt-1 text-[10px] text-slate-500 dark:text-gray-400">
                           Try changing your search or filters.
                         </p>
@@ -484,12 +556,15 @@ const Bookinglist = ({
             </table>
           </div>
 
+          {/* Pagination */}
           <div className="flex flex-col gap-2 border-t border-slate-100 px-3 py-2 dark:border-gray-700/60 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500 dark:text-gray-400">
               <span>
                 Showing {filtered.length ? startIndex + 1 : 0}–
-                {Math.min(startIndex + pageSize, filtered.length)} of {filtered.length}
+                {Math.min(startIndex + pageSize, filtered.length)} of{" "}
+                {filtered.length}
               </span>
+
               <SelectBox
                 value={String(pageSize)}
                 onChange={(e) => setPageSize(Number(e.target.value))}
@@ -511,12 +586,16 @@ const Bookinglist = ({
               >
                 <ChevronLeft size={14} />
               </button>
+
               <span className="min-w-24 text-center text-[11px] text-slate-600 dark:text-gray-300">
                 Page {currentPage} of {totalPages}
               </span>
+
               <button
                 type="button"
-                onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+                onClick={() =>
+                  setCurrentPage((page) => Math.min(totalPages, page + 1))
+                }
                 disabled={currentPage === totalPages}
                 className="flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
               >

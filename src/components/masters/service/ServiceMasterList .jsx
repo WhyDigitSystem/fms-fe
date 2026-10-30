@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import {
+  ArrowLeft,
   Plus,
   Search,
   Pencil,
@@ -17,7 +18,12 @@ const BRANCH_ID = Number(localStorage.getItem("branchId"));
 const isActive = (item) =>
   item.active === true || item.active === "Active" || item.active === 1;
 
-export default function ServiceMasterList({ onAdd, onEdit, refreshTrigger }) {
+export default function ServiceMasterList({
+  onAdd,
+  onEdit,
+  onBack,
+  refreshTrigger,
+}) {
   const [services, setServices] = useState([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
@@ -33,6 +39,7 @@ export default function ServiceMasterList({ onAdd, onEdit, refreshTrigger }) {
 
       const response = await serviceAPI.getAll(ORG_ID, BRANCH_ID);
       const data = Array.isArray(response) ? response : [];
+
       setServices(
         [...data].sort((a, b) => Number(b.id || 0) - Number(a.id || 0)),
       );
@@ -51,6 +58,7 @@ export default function ServiceMasterList({ onAdd, onEdit, refreshTrigger }) {
 
   const filteredServices = services.filter((item) => {
     const q = search.toLowerCase();
+
     return (
       String(item.serviceCode || "")
         .toLowerCase()
@@ -65,7 +73,9 @@ export default function ServiceMasterList({ onAdd, onEdit, refreshTrigger }) {
     1,
     Math.ceil(filteredServices.length / itemsPerPage),
   );
+
   const safePage = Math.min(currentPage, totalPages);
+
   const paginatedServices = filteredServices.slice(
     (safePage - 1) * itemsPerPage,
     safePage * itemsPerPage,
@@ -78,22 +88,38 @@ export default function ServiceMasterList({ onAdd, onEdit, refreshTrigger }) {
       Description: item.serviceDescription || "",
       Status: isActive(item) ? "Active" : "Inactive",
     }));
+
     const worksheet = XLSX.utils.json_to_sheet(rows);
     const workbook = XLSX.utils.book_new();
+
     XLSX.utils.book_append_sheet(workbook, worksheet, "Services");
     XLSX.writeFile(workbook, "ServiceMaster.xlsx");
   };
 
   return (
     <div className="mx-auto max-w-6xl rounded-lg bg-gray-50 p-4 dark:bg-gray-900">
+      {/* HEADER */}
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-semibold text-gray-800 dark:text-white">
-            Service Master
-          </h2>
-          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-            Manage service codes and descriptions
-          </p>
+        <div className="flex items-center gap-2">
+          {/* BACK BUTTON */}
+          <button
+            type="button"
+            onClick={onBack}
+            className="p-1 text-gray-600 transition hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
+            title="Back"
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </button>
+
+          <div>
+            <h2 className="text-lg font-semibold text-gray-800 dark:text-white">
+              Service Master
+            </h2>
+
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              Manage service codes and descriptions
+            </p>
+          </div>
         </div>
 
         <div className="flex items-center gap-2">
@@ -106,25 +132,31 @@ export default function ServiceMasterList({ onAdd, onEdit, refreshTrigger }) {
             <RefreshCw size={14} className={refreshing ? "animate-spin" : ""} />
             Refresh
           </button>
+
           <button
             type="button"
             onClick={exportToExcel}
             className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 px-2.5 py-2 text-xs font-medium text-gray-700 hover:bg-gray-100 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
           >
-            <Download size={14} /> Export
+            <Download size={14} />
+            Export
           </button>
+
           <button
             type="button"
             onClick={onAdd}
             className="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-3 py-2 text-xs font-medium text-white hover:bg-blue-700"
           >
-            <Plus size={15} /> Add Service
+            <Plus size={15} />
+            Add Service
           </button>
         </div>
       </div>
 
+      {/* SEARCH */}
       <div className="mb-3 flex items-center gap-2 rounded-md border border-gray-300 bg-white px-3 dark:border-gray-700 dark:bg-gray-800">
         <Search size={15} className="shrink-0 text-gray-400" />
+
         <input
           type="text"
           value={search}
@@ -137,6 +169,7 @@ export default function ServiceMasterList({ onAdd, onEdit, refreshTrigger }) {
         />
       </div>
 
+      {/* TABLE */}
       <div className="overflow-x-auto rounded-md border border-gray-200 dark:border-gray-700">
         <table className="w-full border-collapse text-left text-xs">
           <thead className="bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-200">
@@ -185,12 +218,15 @@ export default function ServiceMasterList({ onAdd, onEdit, refreshTrigger }) {
                   <td className="whitespace-nowrap px-3 py-2.5 text-gray-600 dark:text-gray-300">
                     {(safePage - 1) * itemsPerPage + index + 1}
                   </td>
+
                   <td className="whitespace-nowrap px-3 py-2.5 font-medium text-gray-800 dark:text-gray-100">
                     {item.serviceCode || "-"}
                   </td>
+
                   <td className="px-3 py-2.5 text-gray-600 dark:text-gray-300">
                     {item.serviceDescription || "-"}
                   </td>
+
                   <td className="whitespace-nowrap px-3 py-2.5">
                     <span
                       className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium ${
@@ -202,6 +238,7 @@ export default function ServiceMasterList({ onAdd, onEdit, refreshTrigger }) {
                       {isActive(item) ? "Active" : "Inactive"}
                     </span>
                   </td>
+
                   <td className="px-3 py-2 text-center">
                     <button
                       type="button"
@@ -219,6 +256,7 @@ export default function ServiceMasterList({ onAdd, onEdit, refreshTrigger }) {
         </table>
       </div>
 
+      {/* PAGINATION */}
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-gray-500 dark:text-gray-400">
         <span>
           Showing{" "}
@@ -239,9 +277,11 @@ export default function ServiceMasterList({ onAdd, onEdit, refreshTrigger }) {
           >
             <ChevronLeft size={14} />
           </button>
+
           <span>
             Page {safePage} of {totalPages}
           </span>
+
           <button
             type="button"
             onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}

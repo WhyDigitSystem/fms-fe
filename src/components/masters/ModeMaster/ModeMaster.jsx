@@ -2,7 +2,7 @@ import { useState } from "react";
 import ModeMasterList from "./ModeMasterList";
 import ModeMasterForm from "./ModeMasterForm";
 
-export default function ModeMaster() {
+export default function ModeMaster({ onBack }) {
   const [screen, setScreen] = useState("list");
   const [editData, setEditData] = useState(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
@@ -17,22 +17,35 @@ export default function ModeMaster() {
     setScreen("form");
   };
 
-  const handleBack = () => {
+  // Back from Form to List
+  const handleBackToList = () => {
     setScreen("list");
     setEditData(null);
     setRefreshTrigger((prev) => prev + 1);
   };
 
+  // Back from List to Previous Screen
+  const handleBackToPrevious = () => {
+    if (onBack) {
+      onBack();
+    } else {
+      window.history.back();
+    }
+  };
+
   return (
     <>
-      {screen === "list" ? (
+      {screen === "list" && (
         <ModeMasterList
           onAdd={handleAdd}
           onEdit={handleEdit}
+          onBack={handleBackToPrevious}
           refreshTrigger={refreshTrigger}
         />
-      ) : (
-        <ModeMasterForm data={editData} onBack={handleBack} />
+      )}
+
+      {screen === "form" && (
+        <ModeMasterForm data={editData} onBack={handleBackToList} />
       )}
     </>
   );

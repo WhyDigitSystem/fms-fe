@@ -2,43 +2,56 @@ import { useState } from "react";
 import CurrencyList from "./CurrencyList";
 import CurrencyForm from "./CurrencyForm";
 
-const CurrencyMaster = () => {
-    const [screen, setScreen] = useState("list");   // list | form
-    const [editData, setEditData] = useState(null); // when editing
+const CurrencyMaster = ({ onBack }) => {
+  const [screen, setScreen] = useState("list"); // list | form
+  const [editData, setEditData] = useState(null);
 
-    const handleAddNew = () => {
-        setEditData(null);
-        setScreen("form");
-    };
+  // Add New Currency
+  const handleAddNew = () => {
+    setEditData(null);
+    setScreen("form");
+  };
 
-    const handleEdit = (data) => {
-        setEditData(data);
-        setScreen("form");
-    };
+  // Edit Currency
+  const handleEdit = (data) => {
+    setEditData(data);
+    setScreen("form");
+  };
 
-    const handleBack = () => {
-        setScreen("list");
-    };
+  // Back to List
+  const handleBack = () => {
+    setScreen("list");
+    setEditData(null);
+  };
 
-    return (
-        <>
-            {screen === "list" && (
-                <CurrencyList
-                    onAddNew={handleAddNew}
-                    onEdit={handleEdit}
-                    onBack={() => { }} // Optional: hook up parent back button if needed
-                />
-            )}
+  // Back to Parent
+  const handleParentBack = () => {
+    if (onBack) {
+      onBack();
+    } else {
+      window.history.back();
+    }
+  };
 
-            {screen === "form" && (
-                <CurrencyForm
-                    editData={editData}
-                    onBack={handleBack}
-                    onSaveSuccess={handleBack} // Triggers automatic reload on back
-                />
-            )}
-        </>
-    );
+  return (
+    <>
+      {screen === "list" && (
+        <CurrencyList
+          onAddNew={handleAddNew}
+          onEdit={handleEdit}
+          onBack={handleParentBack}
+        />
+      )}
+
+      {screen === "form" && (
+        <CurrencyForm
+          editData={editData}
+          onBack={handleBack}
+          onSaveSuccess={handleBack}
+        />
+      )}
+    </>
+  );
 };
 
 export default CurrencyMaster;

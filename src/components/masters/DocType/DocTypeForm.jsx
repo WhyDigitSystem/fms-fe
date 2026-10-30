@@ -1,5 +1,12 @@
 import React, { useState, useEffect } from "react";
-import { Save, X, Building2, FileText, ChevronDown } from "lucide-react";
+import {
+  Save,
+  X,
+  Building2,
+  FileText,
+  ChevronDown,
+  ArrowLeft,
+} from "lucide-react";
 import { docTypeAPI } from "../../../api/doctypeAPI";
 import { useToast } from "../../Toast/ToastContext";
 
@@ -14,14 +21,9 @@ const emptyForm = (ORG_ID, loginUserName) => ({
   createdBy: loginUserName,
 });
 
-// Normalise "active" from any of the shapes the APIs return:
-// true / 1 / "Active"  → active
-// false / 0 / "In-Active" / "Inactive" → inactive
 const isActiveValue = (v) =>
   v === true || v === 1 || v === "Active" || v === "ACTIVE";
 
-// Build form state from a record returned by either
-// documentTypeMasterList, documentTypeMasterVO, or legacy list
 const formFromRecord = (record, ORG_ID, loginUserName) => ({
   id: record?.id ?? 0,
   screenCode: record?.screenCode ?? "",
@@ -36,8 +38,8 @@ const formFromRecord = (record, ORG_ID, loginUserName) => ({
 const DocTypeForm = ({
   onBack,
   onSaveSuccess,
-  editData,          // row from the list (may be partial)
-  editId,            // optional explicit id
+  editData,
+  editId,
   orgId: ORG_ID_PROP,
 }) => {
   const ORG_ID =
@@ -55,15 +57,14 @@ const DocTypeForm = ({
   const [screenList, setScreenList] = useState([]);
   const [docTypeList, setDocTypeList] = useState([]);
 
-  // Resolve the id we should fetch (editId wins, then editData.id)
-  const resolvedEditId =
-    editId ?? (editData?.id != null ? editData.id : null);
+  const resolvedEditId = editId ?? (editData?.id != null ? editData.id : null);
 
   const [form, setForm] = useState(() =>
-    editData && !resolvedEditId
+    editData
       ? formFromRecord(editData, ORG_ID, loginUserName)
-      : emptyForm(ORG_ID, loginUserName)
+      : emptyForm(ORG_ID, loginUserName),
   );
+
   const [fieldErrors, setFieldErrors] = useState({});
 
   const fieldLabels = {
@@ -72,30 +73,29 @@ const DocTypeForm = ({
     desc: "Description",
   };
 
-  // ------------------------------------------------------------
-  // Load screens + dup-check list
-  // ------------------------------------------------------------
   useEffect(() => {
     fetchScreens();
     fetchDocTypeList();
   }, []);
 
-  // ------------------------------------------------------------
-  // Load the record via getDocumentTypeMasterById when editing
-  // ------------------------------------------------------------
   useEffect(() => {
     let cancelled = false;
 
     const loadRecord = async () => {
       if (!resolvedEditId) {
-        setForm(emptyForm(ORG_ID, loginUserName));
+        if (!editData) {
+          setForm(emptyForm(ORG_ID, loginUserName));
+        }
         setFieldErrors({});
         return;
       }
 
       try {
         setLoadingRecord(true);
-        const response = await docTypeAPI.getDocumentTypeMasterById(resolvedEditId);
+
+        const response =
+          await docTypeAPI.getDocumentTypeMasterById(resolvedEditId);
+
         const body = response?.data ?? response;
 
         const record =
@@ -107,9 +107,9 @@ const DocTypeForm = ({
         }
       } catch (error) {
         console.error("Error fetching document type by id:", error);
+
         addToast("Failed to load document type details", "error");
 
-        // Fall back to whatever the list gave us (so the form isn't empty)
         if (!cancelled && editData) {
           setForm(formFromRecord(editData, ORG_ID, loginUserName));
         }
@@ -122,18 +122,16 @@ const DocTypeForm = ({
     };
 
     loadRecord();
+
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resolvedEditId]);
 
-  // ------------------------------------------------------------
-  // Data fetching
-  // ------------------------------------------------------------
   const fetchScreens = async () => {
     try {
       setLoading(true);
+
       const res = await docTypeAPI.getAllScreens();
       const body = res?.data ?? res;
 
@@ -144,7 +142,7 @@ const DocTypeForm = ({
         [];
 
       const sorted = [...list].sort((a, b) =>
-        (a.screenName || "").localeCompare(b.screenName || "")
+        (a.screenName || "").localeCompare(b.screenName || ""),
       );
 
       setScreenList(sorted);
@@ -152,8 +150,12 @@ const DocTypeForm = ({
       setForm((prev) => {
         if (prev.screenCode && !prev.screenName) {
           const match = sorted.find((s) => s.screenCode === prev.screenCode);
-          if (match) return { ...prev, screenName: match.screenName };
+
+          if (match) {
+            return { ...prev, screenName: match.screenName };
+          }
         }
+
         return prev;
       });
     } catch (error) {
@@ -168,19 +170,18 @@ const DocTypeForm = ({
     try {
       const res = await docTypeAPI.getAllDocumentTypeMaster(ORG_ID);
       const body = res?.data ?? res;
+
       const rows =
         body?.paramObjectsMap?.documentTypeMasterList ||
         body?.paramObjectsMap?.documentTypeMasterVo ||
         [];
+
       setDocTypeList(Array.isArray(rows) ? rows : []);
     } catch (error) {
       console.error("Error fetching document type list:", error);
     }
   };
 
-  // ------------------------------------------------------------
-  // Handlers
-  // ------------------------------------------------------------
   const resetForm = () => {
     setForm(emptyForm(ORG_ID, loginUserName));
     setFieldErrors({});
@@ -203,17 +204,22 @@ const DocTypeForm = ({
       } else if (value.length > 20) {
         errorMessage = "Document Code must be maximum 20 characters";
       }
-    } else if (name === "desc") {
-      if (value.length > 200) {
-        errorMessage = "Description must be maximum 200 characters";
-      }
+    } else if (name === "desc" && value.length > 200) {
+      errorMessage = "Description must be maximum 200 characters";
     }
 
     if (errorMessage) {
-      setFieldErrors((prev) => ({ ...prev, [name]: errorMessage }));
+      setFieldErrors((prev) => ({
+        ...prev,
+        [name]: errorMessage,
+      }));
     } else {
       const updatedValue = name === "docCode" ? value.toUpperCase() : value;
-      setForm((prev) => ({ ...prev, [name]: updatedValue }));
+
+      setForm((prev) => ({
+        ...prev,
+        [name]: updatedValue,
+      }));
     }
   };
 
@@ -221,7 +227,10 @@ const DocTypeForm = ({
     const value = e.target.value;
 
     if (fieldErrors.screenCode) {
-      setFieldErrors((prev) => ({ ...prev, screenCode: "" }));
+      setFieldErrors((prev) => ({
+        ...prev,
+        screenCode: "",
+      }));
     }
 
     const selectedScreen = screenList.find((s) => s.screenCode === value);
@@ -233,39 +242,45 @@ const DocTypeForm = ({
     }));
   };
 
-  const toggleActive = () => {
-    setForm((prev) => ({ ...prev, active: !prev.active }));
-  };
-
-  // ------------------------------------------------------------
-  // Save
-  // ------------------------------------------------------------
   const handleSave = async () => {
     const errors = {};
 
-    if (!form.screenCode.trim()) errors.screenCode = "Screen Code is required";
-    if (!form.docCode.trim()) errors.docCode = "Document Code is required";
-    if (!form.desc.trim()) errors.desc = "Description is required";
-    if (form.docCode.trim().length > 20)
+    if (!form.screenCode.trim()) {
+      errors.screenCode = "Screen Code is required";
+    }
+
+    if (!form.docCode.trim()) {
+      errors.docCode = "Document Code is required";
+    }
+
+    if (!form.desc.trim()) {
+      errors.desc = "Description is required";
+    }
+
+    if (form.docCode.trim().length > 20) {
       errors.docCode = "Document Code must be maximum 20 characters";
-    if (form.desc.trim().length > 200)
+    }
+
+    if (form.desc.trim().length > 200) {
       errors.desc = "Description must be maximum 200 characters";
+    }
 
     setFieldErrors(errors);
 
     if (Object.keys(errors).length > 0) {
       const firstError = Object.keys(errors)[0];
       const fieldLabel = fieldLabels[firstError] || firstError;
+
       addToast(`${fieldLabel}: ${errors[firstError]}`, "error");
       return;
     }
 
-    // Duplicate check across the master list
     const duplicateDoc = docTypeList.find(
       (d) =>
         d.docCode?.trim().toUpperCase() === form.docCode.trim().toUpperCase() &&
-        d.id !== form.id
+        d.id !== form.id,
     );
+
     if (duplicateDoc) {
       addToast("Document Code already exists.", "error");
       return;
@@ -273,7 +288,6 @@ const DocTypeForm = ({
 
     setIsSubmitting(true);
 
-    // ✅ Only send id when updating
     const isUpdate = Boolean(form.id && form.id > 0);
 
     const payload = {
@@ -285,10 +299,13 @@ const DocTypeForm = ({
       createdBy: loginUserName,
     };
 
-    if (isUpdate) payload.id = form.id;
+    if (isUpdate) {
+      payload.id = form.id;
+    }
 
     try {
       const response = await docTypeAPI.saveDocumentTypeMaster(payload);
+
       const body = response?.data ?? response;
 
       const status = body?.status === true || body?.statusFlag === "Ok";
@@ -299,35 +316,37 @@ const DocTypeForm = ({
           (isUpdate
             ? "Document type updated successfully!"
             : "Document type created successfully!");
+
         addToast(successMessage, "success");
 
         onSaveSuccess?.();
-        onBack?.();
+
+        if (onBack) {
+          onBack();
+        }
       } else {
         addToast(
           body?.paramObjectsMap?.message ||
-          body?.paramObjectsMap?.errorMessage ||
-          body?.message ||
-          "Failed to save document type",
-          "error"
+            body?.paramObjectsMap?.errorMessage ||
+            body?.message ||
+            "Failed to save document type",
+          "error",
         );
       }
     } catch (error) {
       console.error("Save Error:", error);
+
       addToast(
         error.response?.data?.paramObjectsMap?.message ||
-        error.response?.data?.message ||
-        "Save failed! Try again.",
-        "error"
+          error.response?.data?.message ||
+          "Save failed! Try again.",
+        "error",
       );
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  // ------------------------------------------------------------
-  // Render
-  // ------------------------------------------------------------
   if (loading || loadingRecord) {
     return (
       <div className="p-4 max-w-3xl mx-auto animate-pulse">
@@ -338,10 +357,24 @@ const DocTypeForm = ({
 
   return (
     <div className="p-4 sm:p-6 max-w-6xl mx-auto">
+      {/* Header with Back Button */}
       <div className="mb-6">
+        <button
+          type="button"
+          onClick={onBack}
+          disabled={isSubmitting}
+          className="flex items-center gap-2 mb-3 text-gray-600 dark:text-gray-300 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors disabled:opacity-50"
+        >
+          <ArrowLeft className="h-5 w-5" />
+          <span className="text-sm font-medium">
+            Back to Document Type Master
+          </span>
+        </button>
+
         <h2 className="text-xl font-semibold text-gray-900 dark:text-white tracking-tight">
           {form.id ? "Edit Document Type" : "Add Document Type"}
         </h2>
+
         <p className="text-sm text-gray-500 dark:text-gray-400">
           {form.id
             ? "Update the document type details"
@@ -355,6 +388,7 @@ const DocTypeForm = ({
             <div className="flex items-center justify-center h-8 w-8 rounded-lg bg-indigo-50 dark:bg-indigo-900/30">
               <Building2 className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
             </div>
+
             <h3 className="text-sm font-semibold text-gray-900 dark:text-white uppercase tracking-wide">
               {form.id ? "Edit Document Type" : "Add Document Type"}
             </h3>
@@ -366,17 +400,20 @@ const DocTypeForm = ({
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
                   Screen Code *
                 </label>
+
                 <div className="relative">
                   <select
                     name="screenCode"
                     value={form.screenCode}
                     onChange={handleScreenCodeChange}
-                    className={`w-full appearance-none px-3 py-2.5 pr-8 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500 transition-colors ${fieldErrors.screenCode
+                    className={`w-full appearance-none px-3 py-2.5 pr-8 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500 transition-colors ${
+                      fieldErrors.screenCode
                         ? "border-red-400"
                         : "border-gray-200 dark:border-gray-600"
-                      }`}
+                    }`}
                   >
                     <option value="">Select screen code</option>
+
                     {screenList.map((screen, idx) => (
                       <option
                         key={`${screen.screenCode}-${idx}`}
@@ -386,8 +423,10 @@ const DocTypeForm = ({
                       </option>
                     ))}
                   </select>
+
                   <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
                 </div>
+
                 {fieldErrors.screenCode && (
                   <p className="mt-1.5 text-xs text-red-600 dark:text-red-400">
                     {fieldErrors.screenCode}
@@ -399,6 +438,7 @@ const DocTypeForm = ({
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
                   Screen Name
                 </label>
+
                 <input
                   type="text"
                   value={form.screenName}
@@ -412,17 +452,20 @@ const DocTypeForm = ({
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
                   Document Code *
                 </label>
+
                 <input
                   type="text"
                   name="docCode"
                   value={form.docCode}
                   onChange={handleChange}
                   placeholder="e.g. INV-001"
-                  className={`w-full px-3 py-2.5 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500 transition-colors ${fieldErrors.docCode
+                  className={`w-full px-3 py-2.5 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500 transition-colors ${
+                    fieldErrors.docCode
                       ? "border-red-400"
                       : "border-gray-200 dark:border-gray-600"
-                    }`}
+                  }`}
                 />
+
                 {fieldErrors.docCode && (
                   <p className="mt-1.5 text-xs text-red-600 dark:text-red-400">
                     {fieldErrors.docCode}
@@ -436,15 +479,18 @@ const DocTypeForm = ({
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                   Description *
                 </label>
+
                 <span
-                  className={`text-xs ${form.desc.length > 200
+                  className={`text-xs ${
+                    form.desc.length > 200
                       ? "text-red-500"
                       : "text-gray-400 dark:text-gray-500"
-                    }`}
+                  }`}
                 >
                   {form.desc.length}/200
                 </span>
               </div>
+
               <textarea
                 name="desc"
                 value={form.desc}
@@ -452,11 +498,13 @@ const DocTypeForm = ({
                 rows={3}
                 maxLength={200}
                 placeholder="Briefly describe this document type"
-                className={`w-full px-3 py-2.5 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm placeholder:text-gray-400 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500 ${fieldErrors.desc
+                className={`w-full px-3 py-2.5 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm placeholder:text-gray-400 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500 ${
+                  fieldErrors.desc
                     ? "border-red-400"
                     : "border-gray-200 dark:border-gray-600"
-                  }`}
+                }`}
               />
+
               {fieldErrors.desc && (
                 <p className="mt-1.5 text-xs text-red-600 dark:text-red-400">
                   {fieldErrors.desc}
@@ -466,20 +514,26 @@ const DocTypeForm = ({
           </div>
         </div>
 
+        {/* Footer */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 px-5 sm:px-6 py-4 border-t border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800">
           <div className="flex items-center gap-1.5 text-xs text-gray-400 dark:text-gray-500">
             <FileText className="h-3.5 w-3.5" />
             <span>Fields marked with * are required</span>
           </div>
+
           <div className="flex gap-2 w-full sm:w-auto">
             <button
+              type="button"
               onClick={onBack ?? resetForm}
               disabled={isSubmitting}
               className="flex items-center justify-center gap-1.5 px-4 py-2 border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
             >
-              <X className="h-3.5 w-3.5" /> Cancel
+              <X className="h-3.5 w-3.5" />
+              Cancel
             </button>
+
             <button
+              type="button"
               onClick={handleSave}
               disabled={isSubmitting}
               className="flex items-center justify-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white rounded-lg text-sm font-medium transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed min-w-[92px]"

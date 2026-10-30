@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import {
+  ArrowLeft,
   Plus,
   Search,
   Pencil,
@@ -42,7 +43,12 @@ const getCountryName = (country) =>
 const getCityName = (city) =>
   getRelationName(city, ["city", "cityName", "name"]);
 
-export default function PortMasterList({ onAdd, onEdit, refreshTrigger }) {
+export default function PortMasterList({
+  onAdd,
+  onEdit,
+  onBack,
+  refreshTrigger,
+}) {
   const [ports, setPorts] = useState([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
@@ -128,14 +134,26 @@ export default function PortMasterList({ onAdd, onEdit, refreshTrigger }) {
     <div className="mx-auto max-w-6xl rounded-lg bg-gray-50 p-4 dark:bg-gray-900">
       {/* Header */}
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-semibold text-gray-800 dark:text-white">
-            Port Master
-          </h2>
+        <div className="flex items-center gap-2">
+          {/* Back Button */}
+          <button
+            type="button"
+            onClick={onBack}
+            title="Back"
+            className="rounded-md p-1.5 text-gray-600 transition hover:bg-gray-200 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white"
+          >
+            <ArrowLeft size={20} />
+          </button>
 
-          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-            Manage port codes, names, types, countries, and cities
-          </p>
+          <div>
+            <h2 className="text-lg font-semibold text-gray-800 dark:text-white">
+              Port Master
+            </h2>
+
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              Manage port codes, names, types, countries, and cities
+            </p>
+          </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">

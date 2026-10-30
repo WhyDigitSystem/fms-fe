@@ -2,7 +2,7 @@ import { useState } from "react";
 import PortMasterList from "./PortMasterList";
 import PortMasterForm from "./PortMasterForm";
 
-export default function PortMaster() {
+export default function PortMaster({ onBack }) {
   const [screen, setScreen] = useState("list");
   const [editData, setEditData] = useState(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
@@ -17,22 +17,35 @@ export default function PortMaster() {
     setScreen("form");
   };
 
-  const handleBack = () => {
+  // Back from Form to List
+  const handleBackToList = () => {
     setScreen("list");
     setEditData(null);
     setRefreshTrigger((prev) => prev + 1);
   };
 
+  // Back from List to Previous Screen
+  const handleBackToPrevious = () => {
+    if (onBack) {
+      onBack();
+    } else {
+      window.history.back();
+    }
+  };
+
   return (
     <>
-      {screen === "list" ? (
+      {screen === "list" && (
         <PortMasterList
           onAdd={handleAdd}
           onEdit={handleEdit}
+          onBack={handleBackToPrevious}
           refreshTrigger={refreshTrigger}
         />
-      ) : (
-        <PortMasterForm data={editData} onBack={handleBack} />
+      )}
+
+      {screen === "form" && (
+        <PortMasterForm data={editData} onBack={handleBackToList} />
       )}
     </>
   );

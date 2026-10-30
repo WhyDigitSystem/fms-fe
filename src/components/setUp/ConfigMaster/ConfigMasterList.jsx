@@ -7,6 +7,7 @@ import {
   RefreshCw,
   ChevronLeft,
   ChevronRight,
+  ArrowLeft,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { configAPI } from "../../../api/configAPI";
@@ -17,7 +18,12 @@ const BRANCH_ID = Number(localStorage.getItem("branchId")) || 0;
 const isActive = (value) =>
   value === true || value === 1 || value === "Active" || value === "Y";
 
-export default function ConfigMasterList({ onAdd, onEdit, refreshTrigger }) {
+export default function ConfigMasterList({
+  onAdd,
+  onEdit,
+  onBack,
+  refreshTrigger,
+}) {
   const [configs, setConfigs] = useState([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
@@ -26,6 +32,16 @@ export default function ConfigMasterList({ onAdd, onEdit, refreshTrigger }) {
 
   const itemsPerPage = 10;
 
+  // Back Navigation
+  const handleBack = () => {
+    if (onBack) {
+      onBack();
+    } else {
+      window.history.back();
+    }
+  };
+
+  // Load Configurations
   const loadConfigs = async (showRefresh = false) => {
     try {
       if (showRefresh) {
@@ -54,6 +70,7 @@ export default function ConfigMasterList({ onAdd, onEdit, refreshTrigger }) {
     loadConfigs();
   }, [refreshTrigger]);
 
+  // Search Filter
   const filteredConfigs = configs.filter((item) => {
     const query = search.toLowerCase().trim();
 
@@ -79,6 +96,7 @@ export default function ConfigMasterList({ onAdd, onEdit, refreshTrigger }) {
     );
   });
 
+  // Pagination
   const totalPages = Math.max(
     1,
     Math.ceil(filteredConfigs.length / itemsPerPage),
@@ -91,6 +109,7 @@ export default function ConfigMasterList({ onAdd, onEdit, refreshTrigger }) {
     safePage * itemsPerPage,
   );
 
+  // Export Excel
   const exportToExcel = () => {
     const rows = filteredConfigs.map((item, index) => ({
       "S.No": index + 1,
@@ -126,14 +145,25 @@ export default function ConfigMasterList({ onAdd, onEdit, refreshTrigger }) {
     <div className="mx-auto max-w-7xl rounded-lg bg-gray-50 p-4 dark:bg-gray-900">
       {/* Header */}
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-semibold text-gray-800 dark:text-white">
-            Configuration Master
-          </h2>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleBack}
+            title="Back"
+            className="rounded-md p-1.5 text-gray-600 transition hover:bg-gray-200 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-white"
+          >
+            <ArrowLeft size={19} />
+          </button>
 
-          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-            Manage company configurations, modes, services, and products.
-          </p>
+          <div>
+            <h2 className="text-lg font-semibold text-gray-800 dark:text-white">
+              Configuration Master
+            </h2>
+
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              Manage company configurations, modes, services, and products.
+            </p>
+          </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
