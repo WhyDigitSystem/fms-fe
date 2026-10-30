@@ -182,6 +182,13 @@ const MASTERS = [
     color: "indigo",
     screenCode: "CUST",
   },
+  {
+    name: "listofvalues",
+    icon: Coins,
+    path: "/listofvalues",
+    color: "teal",
+    screenCode: "LOV",
+  },
 ];
 
 // Business Master contains only these items

@@ -39,7 +39,7 @@ const controlClass =
 const headings = [
   { label: "Enquiry No.", className: "" },
   { label: "Date", className: "" },
-  { label: "Customer", className: "" },
+  { label: "Company", className: "" },
   { label: "Movement", className: "" },
   { label: "Mode", className: "" },
   { label: "Origin / POL", className: "" },
@@ -50,52 +50,98 @@ const headings = [
 ];
 
 // -------------------------------------------------------------
-// ✅ Map API row → UI row
+// Helpers — flatten anything (string | number | object) → string
 // -------------------------------------------------------------
 const titleCase = (v) =>
   String(v || "")
     .toLowerCase()
     .replace(/(^|\s)\S/g, (s) => s.toUpperCase());
 
+const locationLabel = (value) => {
+  if (value == null || value === "") return "";
+  if (typeof value === "string" || typeof value === "number")
+    return String(value);
+  if (typeof value === "object") {
+    if (value.city) return value.city;
+    if (value.portName) return value.portName;
+    return "";
+  }
+  return "";
+};
+
+const locationId = (value) => {
+  if (value == null || value === "") return "";
+  if (typeof value === "string" || typeof value === "number")
+    return String(value);
+  if (typeof value === "object" && value.id != null) return String(value.id);
+  return "";
+};
+
+// -------------------------------------------------------------
+// Date helpers
+// ISO (yyyy-mm-dd or ISO datetime) → dd-mm-yyyy
+// -------------------------------------------------------------
+const pad2 = (n) => String(n).padStart(2, "0");
+
+const toDdMmYyyy = (value) => {
+  if (value == null || value === "") return "";
+  const s = String(value).trim();
+
+  // Already dd-mm-yyyy?
+  if (/^\d{2}-\d{2}-\d{4}$/.test(s)) return s;
+
+  // ISO datetime — take date part
+  const isoMatch = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoMatch) {
+    const [, y, m, d] = isoMatch;
+    return `${d}-${m}-${y}`;
+  }
+
+  // Fallback: try Date parse
+  const d = new Date(s);
+  if (!Number.isNaN(d.getTime())) {
+    return `${pad2(d.getDate())}-${pad2(d.getMonth() + 1)}-${d.getFullYear()}`;
+  }
+  return s;
+};
+
 // Pick the right location field based on shipment mode
 const pickOriginLocation = (r) => {
   const mode = String(r?.shipmentMode || "").toUpperCase();
-  if (mode === "SEA") return r?.originPort || "";
-  if (mode === "AIR") return r?.originAirport || "";
-  if (mode === "ROAD") return r?.originTerminal || "";
-  return r?.originPort || r?.originAirport || r?.originTerminal || "";
+  if (mode === "SEA") return r?.originPort;
+  if (mode === "AIR") return r?.originAirport;
+  if (mode === "ROAD") return r?.originTerminal;
+  return r?.originPort || r?.originAirport || r?.originTerminal;
 };
 
 const pickDestinationLocation = (r) => {
   const mode = String(r?.shipmentMode || "").toUpperCase();
-  if (mode === "SEA") return r?.destinationPort || "";
-  if (mode === "AIR") return r?.destinationAirport || "";
-  if (mode === "ROAD") return r?.destinationTerminal || "";
-  return (
-    r?.destinationPort ||
-    r?.destinationAirport ||
-    r?.destinationTerminal ||
-    ""
-  );
+  if (mode === "SEA") return r?.destinationPort;
+  if (mode === "AIR") return r?.destinationAirport;
+  if (mode === "ROAD") return r?.destinationTerminal;
+  return r?.destinationPort || r?.destinationAirport || r?.destinationTerminal;
 };
 
 const toRow = (item) => ({
-  // keep the original payload so edit can pass it straight through
   ...item,
 
   id: item?.id,
   enquiryNo: item?.docId || "",
-  enquiryDate: item?.docDate || "",
-  customer: item?.customer || "",
+  enquiryDateRaw: item?.docDate || "",
+  enquiryDate: toDdMmYyyy(item?.docDate),
+  company: item?.company || item?.customer || "",
+  customer: item?.company || item?.customer || "",
   movement: item?.movement ? titleCase(item.movement) : "",
   mode: item?.shipmentMode ? titleCase(item.shipmentMode) : "",
-  origin: item?.fromLocation || "",
-  destination: item?.toLocation || "",
-  pol: pickOriginLocation(item),
-  pod: pickDestinationLocation(item),
+  origin: locationLabel(item?.fromLocation),
+  destination: locationLabel(item?.toLocation),
+  pol: locationLabel(pickOriginLocation(item)),
+  pod: locationLabel(pickDestinationLocation(item)),
+  polId: locationId(pickOriginLocation(item)),
+  podId: locationId(pickDestinationLocation(item)),
   cargo: item?.cargoDescription || "",
   cargoType: item?.cargoType || "",
-  status: item?.status || "Open", // API doesn't send status yet → default Open
+  status: item?.status || "Open",
 });
 
 const SelectBox = ({ value, onChange, options, label, className = "" }) => (
@@ -135,7 +181,6 @@ const EnquiryList = ({
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
-  // ✅ Normalise once per data change
   const rows = useMemo(() => enquiries.map(toRow), [enquiries]);
 
   const filtered = useMemo(() => {
@@ -145,7 +190,7 @@ const EnquiryList = ({
       const matchesSearch = [
         item.enquiryNo,
         item.enquiryDate,
-        item.customer,
+        item.company,
         item.movement,
         item.mode,
         item.origin,
@@ -396,9 +441,9 @@ const EnquiryList = ({
                         <td className="max-w-[180px] px-3 py-2 align-middle">
                           <p
                             className="truncate font-semibold text-slate-800 dark:text-gray-100"
-                            title={item.customer || ""}
+                            title={item.company || ""}
                           >
-                            {item.customer || "-"}
+                            {item.company || "-"}
                           </p>
                         </td>
                         <td className="whitespace-nowrap px-3 py-2 align-middle">

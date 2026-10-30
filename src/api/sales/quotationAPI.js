@@ -40,6 +40,26 @@ export const QuotationAPI = {
     }
   },
 
+  /* ✅ New API for Revision */
+  getNextQuotationRevision: async (docId) => {
+    try {
+      const res = await apiClient.get(
+        "/api/sales/getNextQuotationRevision",
+        {
+          params: { docId },
+        }
+      );
+      const body = res?.data ?? res;
+      return {
+        docId: body?.paramObjectsMap?.docId ?? "",
+        revisionNo: body?.paramObjectsMap?.revisionNo ?? 0,
+      };
+    } catch (error) {
+      console.error("❌ Error fetching next quotation revision:", error);
+      throw error;
+    }
+  },
+
   createUpdateQuotation: async (payload) => {
     try {
       const res = await apiClient.put(

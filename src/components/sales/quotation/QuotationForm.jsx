@@ -1,14 +1,12 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
   ArrowRight,
-  Box,
-  Building2,
+  Calendar as CalendarIcon,
   Check,
   ChevronDown,
   Download,
   FileText,
-  ListChecks,
   MapPin,
   Package,
   Plane,
@@ -29,21 +27,112 @@ import {
 } from "./quotationUtils";
 import { downloadQuotationPdf } from "./quotationPdf";
 import QuotationAPI from "../../../api/sales/quotationAPI";
+import EnquiryAPI from "../../../api/sales/enquiryAPI";
 import currencyAPI from "../../../api/currencyAPI";
 
-const today = () => {
+// -------------------------------------------------------------
+// Date Helpers
+// -------------------------------------------------------------
+const pad2 = (n) => String(n).padStart(2, "0");
+
+const todayIso = () => {
   const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
-    d.getDate(),
-  ).padStart(2, "0")}`;
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 };
 
-const addDays = (days) => {
+const isoToDisplay = (value) => {
+  if (value == null || value === "") return "";
+  const s = String(value).trim();
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return `${m[3]}-${m[2]}-${m[1]}`;
+  if (/^\d{2}-\d{2}-\d{4}$/.test(s)) return s;
+  const d = new Date(s);
+  if (!Number.isNaN(d.getTime())) {
+    return `${pad2(d.getDate())}-${pad2(d.getMonth() + 1)}-${d.getFullYear()}`;
+  }
+  return s;
+};
+
+const displayToIso = (value) => {
+  if (value == null || value === "") return "";
+  const s = String(value).trim();
+  const m = s.match(/^(\d{2})-(\d{2})-(\d{4})$/);
+  if (m) {
+    const [, dd, mm, yyyy] = m;
+    const d = Number(dd);
+    const mo = Number(mm);
+    const y = Number(yyyy);
+    if (d >= 1 && d <= 31 && mo >= 1 && mo <= 12 && y >= 1900 && y <= 3000) {
+      return `${yyyy}-${mm}-${dd}`;
+    }
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  return "";
+};
+
+const addDaysIso = (days) => {
   const d = new Date();
   d.setDate(d.getDate() + days);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
-    d.getDate(),
-  ).padStart(2, "0")}`;
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+};
+
+const formatTyping = (val) => {
+  const digits = val.replace(/\D/g, "").slice(0, 8);
+  if (digits.length <= 2) return digits;
+  if (digits.length <= 4) return `${digits.slice(0, 2)}-${digits.slice(2)}`;
+  return `${digits.slice(0, 2)}-${digits.slice(2, 4)}-${digits.slice(4)}`;
+};
+
+const today = () => isoToDisplay(todayIso());
+const addDays = (days) => isoToDisplay(addDaysIso(days));
+
+// -------------------------------------------------------------
+// Other Helpers
+// -------------------------------------------------------------
+const cityLabel = (value) => {
+  if (value == null || value === "") return "";
+  if (typeof value === "string" || typeof value === "number")
+    return String(value);
+  if (typeof value === "object") {
+    if (value.city) return String(value.city);
+    if (value.name) return String(value.name);
+    return "";
+  }
+  return "";
+};
+
+const idValue = (value) => {
+  if (value == null || value === "") return "";
+  if (typeof value === "string" || typeof value === "number")
+    return String(value);
+  if (typeof value === "object" && value.id != null) return String(value.id);
+  return "";
+};
+
+const portLabel = (value) => {
+  if (value == null || value === "") return "";
+  if (typeof value === "string" || typeof value === "number")
+    return String(value);
+  if (typeof value === "object") {
+    if (value.portName && value.portCode)
+      return `${value.portName} (${value.portCode})`;
+    if (value.portName) return String(value.portName);
+    return "";
+  }
+  return "";
+};
+
+const plainLabel = (value) => {
+  if (value == null || value === "") return "";
+  if (typeof value === "string" || typeof value === "number")
+    return String(value);
+  if (typeof value === "object") {
+    if (value.valuesDescription) return String(value.valuesDescription);
+    if (value.description) return String(value.description);
+    if (value.name) return String(value.name);
+    return "";
+  }
+  return "";
 };
 
 let uid = 1000;
@@ -92,16 +181,31 @@ const initialForm = {
   id: 0,
   quotationNo: "",
   quotationDate: today(),
+  enquiryNo: "",
+  enquiryDate: "",
+  originalDocId: "", // Track the original docId for revisions
+  revisionNo: 0,
+
+  shipmentMode: "",
+  movement: "",
+
   expirationDate: addDays(15),
   company: "",
   service: "Door to Airport",
   currency: "",
   paymentTerms: "",
   incoterm: "EXW",
-  originCode: "",
+
   originCity: "",
-  destinationCode: "",
+  originCityId: "",
+  originPort: "",
+  originPortId: "",
+
   destinationCity: "",
+  destinationCityId: "",
+  destinationPort: "",
+  destinationPortId: "",
+
   status: "Draft",
   customerName: "",
   customerPhone: "",
@@ -234,13 +338,67 @@ const TextField = ({
       aria-invalid={!!error}
       aria-required={required || undefined}
       onChange={(e) => onChange?.(e.target.value)}
-      className={`${inputClass} ${
-        error ? "!border-rose-500 focus:!ring-rose-500/10" : ""
-      }`}
+      className={`${inputClass} ${error ? "!border-rose-500 focus:!ring-rose-500/10" : ""
+        }`}
       {...rest}
     />
   </Field>
 );
+
+/* ✅ Custom DatePickerField that visually shows dd-mm-yyyy */
+const DatePickerField = ({
+  label,
+  required,
+  error,
+  onChange,
+  value, // display format dd-mm-yyyy
+  className = "",
+}) => {
+  const hiddenDateRef = useRef(null);
+
+  const handleTextChange = (e) => {
+    const formatted = formatTyping(e.target.value);
+    onChange?.(formatted);
+  };
+
+  const handleNativeDate = (e) => {
+    const iso = e.target.value;
+    if (iso) onChange?.(isoToDisplay(iso));
+  };
+
+  return (
+    <Field label={label} required={required} error={error} className={className}>
+      <div className="relative">
+        <input
+          type="text"
+          placeholder="dd-mm-yyyy"
+          value={value ?? ""}
+          onChange={handleTextChange}
+          aria-invalid={!!error}
+          aria-required={required || undefined}
+          className={`${inputClass} pr-8 ${error ? "!border-rose-500 focus:!ring-rose-500/10" : ""
+            }`}
+        />
+        <button
+          type="button"
+          onClick={() => hiddenDateRef.current?.showPicker()}
+          className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-gray-200"
+          aria-label="Open date picker"
+        >
+          <CalendarIcon size={13} />
+        </button>
+        <input
+          type="date"
+          ref={hiddenDateRef}
+          className="absolute bottom-0 right-0 h-0 w-0 opacity-0 pointer-events-none"
+          tabIndex={-1}
+          value={displayToIso(value) || ""}
+          onChange={handleNativeDate}
+        />
+      </div>
+    </Field>
+  );
+};
 
 const SelectField = ({
   label,
@@ -261,9 +419,8 @@ const SelectField = ({
         aria-invalid={!!error}
         aria-required={required || undefined}
         onChange={(e) => onChange(e.target.value)}
-        className={`${inputClass} appearance-none pr-7 ${
-          error ? "!border-rose-500 focus:!ring-rose-500/10" : ""
-        }`}
+        className={`${inputClass} appearance-none pr-7 ${error ? "!border-rose-500 focus:!ring-rose-500/10" : ""
+          }`}
       >
         <option value="">{placeholder}</option>
         {options.map((option) => {
@@ -285,6 +442,174 @@ const SelectField = ({
     </div>
   </Field>
 );
+
+/* ✅ Searchable combobox for city & enquiry pickers */
+const SearchableSelectField = ({
+  label,
+  required,
+  error,
+  value,
+  onChange,
+  options = [],
+  placeholder = "Search...",
+  disabled,
+  className = "",
+}) => {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const [rect, setRect] = useState(null);
+  const containerRef = useRef(null);
+  const inputRef = useRef(null);
+
+  const selectedLabel = useMemo(() => {
+    const found = options.find((opt) => {
+      const val = typeof opt === "string" ? opt : opt.value;
+      return String(val) === String(value);
+    });
+    if (!found) return "";
+    return typeof found === "string" ? found : found.label;
+  }, [options, value]);
+
+  const filtered = useMemo(() => {
+    const t = q.trim().toLowerCase();
+    const list = t
+      ? options.filter((opt) => {
+        const text =
+          typeof opt === "string" ? opt : `${opt.label} ${opt.value}`;
+        return text.toLowerCase().includes(t);
+      })
+      : options;
+    return list.slice(0, 100);
+  }, [options, q]);
+
+  const updateRect = () => {
+    if (inputRef.current) {
+      setRect(inputRef.current.getBoundingClientRect());
+    }
+  };
+
+  useEffect(() => {
+    const onDown = (e) => {
+      if (containerRef.current && !containerRef.current.contains(e.target)) {
+        setOpen(false);
+      }
+    };
+    const onScroll = () => {
+      if (open) updateRect();
+    };
+    document.addEventListener("mousedown", onDown);
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", onScroll);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", onScroll);
+    };
+  }, [open]);
+
+  const handleFocus = () => {
+    updateRect();
+    setQ("");
+    setOpen(true);
+  };
+
+  return (
+    <Field label={label} required={required} error={error} className={className}>
+      <div className="relative" ref={containerRef}>
+        <input
+          ref={inputRef}
+          type="text"
+          value={open ? q : selectedLabel}
+          placeholder={placeholder}
+          disabled={disabled}
+          aria-invalid={!!error}
+          aria-required={required || undefined}
+          onFocus={handleFocus}
+          onChange={(e) => {
+            setQ(e.target.value);
+            setOpen(true);
+            updateRect();
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              setOpen(false);
+              e.currentTarget.blur();
+            }
+            if (e.key === "Enter" && open && filtered.length === 1) {
+              e.preventDefault();
+              const opt = filtered[0];
+              onChange?.(typeof opt === "string" ? opt : opt.value);
+              setOpen(false);
+              e.currentTarget.blur();
+            }
+          }}
+          className={`${inputClass} pr-14 ${error ? "!border-rose-500 focus:!ring-rose-500/10" : ""
+            }`}
+        />
+        {value && !disabled && (
+          <button
+            type="button"
+            aria-label="Clear selection"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => {
+              onChange?.("");
+              setOpen(false);
+            }}
+            className="absolute right-7 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-gray-200"
+          >
+            <X size={12} />
+          </button>
+        )}
+        <ChevronDown
+          size={12}
+          className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400"
+        />
+
+        {open && rect && (
+          <ul
+            style={{
+              position: "fixed",
+              top: rect.bottom + 4,
+              left: rect.left,
+              width: rect.width,
+              zIndex: 9999,
+            }}
+            className="max-h-52 overflow-auto rounded-md border border-slate-200 bg-white py-1 text-[11px] shadow-lg dark:border-gray-700 dark:bg-gray-900"
+          >
+            {filtered.length === 0 ? (
+              <li className="px-2.5 py-2 text-slate-500 dark:text-gray-400">
+                No matches
+              </li>
+            ) : (
+              filtered.map((opt) => {
+                const val = typeof opt === "string" ? opt : opt.value;
+                const lbl = typeof opt === "string" ? opt : opt.label;
+                return (
+                  <li key={val}>
+                    <button
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => {
+                        onChange?.(val);
+                        setOpen(false);
+                      }}
+                      className={`flex w-full items-center justify-between gap-2 px-2.5 py-1.5 text-left hover:bg-blue-50 dark:hover:bg-blue-500/10 ${String(val) === String(value)
+                          ? "bg-blue-50/60 font-semibold text-blue-700 dark:bg-blue-500/10 dark:text-blue-300"
+                          : "text-slate-700 dark:text-gray-200"
+                        }`}
+                    >
+                      <span className="truncate">{lbl}</span>
+                    </button>
+                  </li>
+                );
+              })
+            )}
+          </ul>
+        )}
+      </div>
+    </Field>
+  );
+};
 
 const TextArea = ({ label, value, onChange, rows = 3, placeholder }) => (
   <Field label={label}>
@@ -367,30 +692,13 @@ const Stat = ({ label, value, strong }) => (
   <div className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 dark:border-gray-700 dark:bg-gray-900/50">
     <p className="text-[10px] text-slate-500 dark:text-gray-400">{label}</p>
     <p
-      className={`mt-0.5 text-[12px] ${
-        strong
+      className={`mt-0.5 text-[12px] ${strong
           ? "font-bold text-blue-700 dark:text-blue-300"
           : "font-semibold text-slate-800 dark:text-gray-100"
-      }`}
+        }`}
     >
       {value}
     </p>
-  </div>
-);
-
-const StepHeader = ({ step, title, subtitle }) => (
-  <div className="mb-1.5">
-    <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-blue-600">
-      Step {step} of 3
-    </p>
-    <h2 className="text-sm font-bold tracking-tight text-slate-900 dark:text-white">
-      {title}
-    </h2>
-    {subtitle && (
-      <p className="text-[10px] leading-3.5 text-slate-500 dark:text-gray-400">
-        {subtitle}
-      </p>
-    )}
   </div>
 );
 
@@ -398,21 +706,34 @@ const StepHeader = ({ step, title, subtitle }) => (
 /* Screen                                                              */
 /* ------------------------------------------------------------------ */
 
-const QuotationForm = ({ onBack = () => {}, onSave, editData }) => {
+const QuotationForm = ({ onBack = () => { }, onSave, editData }) => {
   const [step, setStep] = useState(1);
-  const [form, setForm] = useState(() => ({
-    ...initialForm,
-    ...editData,
-    quotationDate: editData?.quotationDate || today(),
-    expirationDate: editData?.expirationDate || addDays(15),
-    packages: editData?.packages?.length
-      ? editData.packages.map((p) => ({ ...p }))
-      : [emptyPackage()],
-    originCharges: editData?.originCharges?.map((c) => ({ ...c })) || [],
-    airRates: editData?.airRates?.length
-      ? editData.airRates.map((r) => ({ ...r }))
-      : [emptyAirRate()],
-  }));
+  const [form, setForm] = useState(() => {
+    const base = {
+      ...initialForm,
+      ...editData,
+      quotationDate: editData?.quotationDate
+        ? isoToDisplay(editData.quotationDate)
+        : today(),
+      expirationDate: editData?.expirationDate
+        ? isoToDisplay(editData.expirationDate)
+        : addDays(15),
+      packages: editData?.packages?.length
+        ? editData.packages.map((p) => ({ ...p }))
+        : [emptyPackage()],
+      originCharges: editData?.originCharges?.map((c) => ({ ...c })) || [],
+      airRates: editData?.airRates?.length
+        ? editData.airRates.map((r) => ({ ...r }))
+        : [emptyAirRate()],
+      originalDocId: editData?.docId || "",
+    };
+
+    // If we are revising, clear the ID so it creates a new record
+    if (editData?.docId) {
+      base.id = 0;
+    }
+    return base;
+  });
 
   const [errors, setErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
@@ -421,6 +742,8 @@ const QuotationForm = ({ onBack = () => {}, onSave, editData }) => {
   const [loadingDocId, setLoadingDocId] = useState(false);
 
   const [currencyList, setCurrencyList] = useState([]);
+  const [enquiries, setEnquiries] = useState([]);
+  const [ports, setPorts] = useState([]);
 
   const orgId = parseInt(localStorage.getItem("orgId")) || 1000000001;
   const branch = parseInt(localStorage.getItem("branchId")) || orgId;
@@ -437,8 +760,35 @@ const QuotationForm = ({ onBack = () => {}, onSave, editData }) => {
   }, [currencyList, form.currency]);
 
   // --------------------------------------------------------------
-  // Fetch auto-generated quotation number (create mode only)
+  // Load supporting data
   // --------------------------------------------------------------
+  const fetchEnquiries = useCallback(async () => {
+    try {
+      const rows = await EnquiryAPI.getEnquiryByOrgId(branch, orgId);
+      setEnquiries(Array.isArray(rows) ? rows : []);
+    } catch (error) {
+      console.error("Failed to load enquiries:", error);
+    }
+  }, [branch, orgId]);
+
+  const fetchPorts = useCallback(async () => {
+    try {
+      const rows = await EnquiryAPI.getPortByOrgIdAndBranch(orgId, branch);
+      setPorts(Array.isArray(rows) ? rows : []);
+    } catch (error) {
+      console.error("Failed to load ports:", error);
+    }
+  }, [orgId, branch]);
+
+  const fetchCurrencies = useCallback(async () => {
+    try {
+      const data = await currencyAPI.getAllCurrencies(orgId);
+      setCurrencyList(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error("Failed to fetch currencies:", err);
+    }
+  }, [orgId]);
+
   const fetchQuotationDocId = useCallback(async () => {
     try {
       setLoadingDocId(true);
@@ -455,9 +805,6 @@ const QuotationForm = ({ onBack = () => {}, onSave, editData }) => {
     }
   }, [orgId]);
 
-  // --------------------------------------------------------------
-  // ✅ Fetch full record by id and map to form state
-  // --------------------------------------------------------------
   const fetchQuotationById = useCallback(async (id) => {
     try {
       setRecordLoading(true);
@@ -467,21 +814,48 @@ const QuotationForm = ({ onBack = () => {}, onSave, editData }) => {
       const ci = record.customerInformation?.[0] || {};
       const ct = record.commercialTerms?.[0] || {};
 
+      const isRevise = !!record.docId; // If docId is present, this is a revise flow
+      let newDocId = record.docId || "";
+      let newRevNo = record.revisionNo || 0;
+
+      if (isRevise) {
+        const revData = await QuotationAPI.getNextQuotationRevision(record.docId);
+        newDocId = revData.docId;
+        newRevNo = revData.revisionNo;
+      }
+
       setForm({
-        id: record.id || id,
-        quotationNo: record.docId || "",
-        quotationDate: record.docDate || today(),
-        expirationDate: record.expirationDate || addDays(15),
+        id: isRevise ? 0 : (record.id || id),
+        originalDocId: record.docId || "",
+        revisionNo: newRevNo,
+        quotationNo: newDocId,
+        quotationDate: isoToDisplay(record.docDate || todayIso()),
+        enquiryNo: idValue(record.enquiryNo || record.enquiryId),
+        enquiryDate: record.enquiryDate
+          ? isoToDisplay(record.enquiryDate)
+          : "",
+
+        shipmentMode: plainLabel(record.shipmentMode),
+        movement: plainLabel(record.movement),
+
+        expirationDate: isoToDisplay(record.expirationDate || addDaysIso(15)),
         company: record.companyName || "",
         service: record.serviceType || "Door to Airport",
         currency: record.currency?.id ? String(record.currency.id) : "",
         paymentTerms: record.paymentTerms || "",
         incoterm: record.incoterm || "EXW",
-        originCode: record.originCode || "",
-        originCity: record.originCity || "",
-        destinationCode: record.destinationCode || "",
-        destinationCity: record.destinationCity || "",
-        status: "Draft", // API doesn't return status yet
+
+        originCity: cityLabel(record.originCity),
+        originCityId: idValue(record.originCity),
+        originPort: portLabel(record.originPort),
+        originPortId: idValue(record.originPort),
+
+        destinationCity: cityLabel(record.destinationCity),
+        destinationCityId: idValue(record.destinationCity),
+        destinationPort: portLabel(record.destinationPort),
+        destinationPortId: idValue(record.destinationPort),
+
+        status: "Draft",
         customerName: ci.customerName || "",
         customerPhone: ci.customerPhone || "",
         customerEmail: ci.customerEmail || "",
@@ -489,50 +863,55 @@ const QuotationForm = ({ onBack = () => {}, onSave, editData }) => {
         agentName: ci.agentName || record.agentName || "",
         agentPhone: ci.agentPhone || "",
         agentEmail: ci.agentEmail || "",
+
         packages: record.shippingDetails?.length
           ? record.shippingDetails.map((p) => ({
-              id: p.id || nextUid(),
-              quantity: p.quantity != null ? String(p.quantity) : "",
-              weight: p.packageWeight != null ? String(p.packageWeight) : "",
-              weightUnit: p.weightUnit || "kg",
-              length: p.length != null ? String(p.length) : "",
-              width: p.width != null ? String(p.width) : "",
-              height: p.height != null ? String(p.height) : "",
-              dimensionUnit: p.dimensionUnit || "cm",
-              cargoType: p.cargoType || "",
-              cargoDescription: p.cargoDescription || "",
-            }))
+            id: p.id || nextUid(),
+            quantity: p.quantity != null ? String(p.quantity) : "",
+            weight: p.packageWeight != null ? String(p.packageWeight) : "",
+            weightUnit: p.weightUnit || "kg",
+            length: p.length != null ? String(p.length) : "",
+            width: p.width != null ? String(p.width) : "",
+            height: p.height != null ? String(p.height) : "",
+            dimensionUnit: p.dimensionUnit || "cm",
+            cargoType: p.cargoType || "",
+            cargoDescription: p.cargoDescription || "",
+          }))
           : [emptyPackage()],
+
         originCharges: record.originCharges?.length
           ? record.originCharges.map((c) => ({
-              id: c.id || nextUid(),
-              description: c.chargeDescription || "",
-              rate: c.rate != null ? String(c.rate) : "",
-              rateUnit: c.rateUnit || "Shipment",
-              minimumCharge:
-                c.minimumCharge != null ? String(c.minimumCharge) : "",
-              quantity: c.quantityUnits != null ? String(c.quantityUnits) : "1",
-              basis: c.chargeableBasis || "",
-              notes: c.chargeNotes || "",
-            }))
+            id: c.id || nextUid(),
+            description: c.chargeDescription || "",
+            rate: c.rate != null ? String(c.rate) : "",
+            rateUnit: c.rateUnit || "Shipment",
+            minimumCharge:
+              c.minimumCharge != null ? String(c.minimumCharge) : "",
+            quantity:
+              c.quantityUnits != null ? String(c.quantityUnits) : "1",
+            basis: c.chargeableBasis || "",
+            notes: c.chargeNotes || "",
+          }))
           : [],
+
         airRates: record.airFreightRates?.length
           ? record.airFreightRates.map((a) => ({
-              id: a.id || nextUid(),
-              airlineName: a.airlineName || "",
-              airlineCode: a.airlineCode || "",
-              productName: a.productName || "",
-              destinationCode: a.destinationCode || "",
-              transitVia: a.transitVia || "",
-              rateType: a.freightRateType || "",
-              minimumWeight:
-                a.minimumWeight != null ? String(a.minimumWeight) : "",
-              ratePerKg: a.ratePerKg != null ? String(a.ratePerKg) : "",
-              fuelRate: a.fuelRate != null ? String(a.fuelRate) : "",
-              riskRate: a.riskRate != null ? String(a.riskRate) : "",
-              remarks: a.rateRemarks || "",
-            }))
+            id: a.id || nextUid(),
+            airlineName: a.airlineName || "",
+            airlineCode: a.airlineCode || "",
+            productName: a.productName || "",
+            destinationCode: a.destinationCode || "",
+            transitVia: a.transitVia || "",
+            rateType: a.freightRateType || "",
+            minimumWeight:
+              a.minimumWeight != null ? String(a.minimumWeight) : "",
+            ratePerKg: a.ratePerKg != null ? String(a.ratePerKg) : "",
+            fuelRate: a.fuelRate != null ? String(a.fuelRate) : "",
+            riskRate: a.riskRate != null ? String(a.riskRate) : "",
+            remarks: a.rateRemarks || "",
+          }))
           : [emptyAirRate()],
+
         insurancePercentage:
           ct.insurancePercentage != null ? String(ct.insurancePercentage) : "",
         cargoValue: ct.cargoValue != null ? String(ct.cargoValue) : "",
@@ -563,31 +942,126 @@ const QuotationForm = ({ onBack = () => {}, onSave, editData }) => {
     }
   }, []);
 
-  // Fetch Currencies
   useEffect(() => {
-    const fetchCurrencies = async () => {
-      try {
-        const data = await currencyAPI.getAllCurrencies(orgId);
-        setCurrencyList(data);
-      } catch (err) {
-        console.error("Failed to fetch currencies:", err);
-      }
-    };
     fetchCurrencies();
-  }, [orgId]);
+    fetchEnquiries();
+    fetchPorts();
+  }, [fetchCurrencies, fetchEnquiries, fetchPorts]);
 
   useEffect(() => {
-    if (editData?.id) {
-      fetchQuotationById(editData.id);
-      setStep(1);
-    } else {
-      fetchQuotationDocId();
-      setStep(1);
-    }
+    if (editData?.id) fetchQuotationById(editData.id);
+    else fetchQuotationDocId();
+    setStep(1);
     setErrors({});
     setToast("");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editData?.id]);
+
+  // --------------------------------------------------------------
+  // Derived data
+  // --------------------------------------------------------------
+  const enquiryOptions = useMemo(
+    () =>
+      enquiries.map((e) => ({
+        value: String(e.id),
+        label: e.docId || `Enquiry ${e.id}`,
+      })),
+    [enquiries],
+  );
+
+  const getPortOptionsForCity = useCallback(
+    (city) => {
+      if (!city || !ports.length) return [];
+      const cityUpper = String(city).trim().toUpperCase();
+      return ports
+        .filter(
+          (p) =>
+            String(p?.city?.city || "").trim().toUpperCase() === cityUpper,
+        )
+        .map((p) => ({
+          value: String(p.id),
+          label: `${p.portName} (${p.portCode})`,
+        }));
+    },
+    [ports],
+  );
+
+  const originPortOptions = useMemo(
+    () => getPortOptionsForCity(form.originCity),
+    [getPortOptionsForCity, form.originCity],
+  );
+
+  const destinationPortOptions = useMemo(
+    () => getPortOptionsForCity(form.destinationCity),
+    [getPortOptionsForCity, form.destinationCity],
+  );
+
+  // --------------------------------------------------------------
+  // Auto-fill from enquiry
+  // --------------------------------------------------------------
+  const handleEnquirySelect = (enquiryId) => {
+    const found = enquiries.find((e) => String(e.id) === String(enquiryId));
+    if (!found) {
+      setForm((p) => ({ ...p, enquiryNo: enquiryId, enquiryDate: "" }));
+      return;
+    }
+
+    const mode = String(found.shipmentMode || "").toUpperCase();
+    const originPortVal =
+      mode === "SEA"
+        ? found.originPort
+        : mode === "AIR"
+          ? found.originAirport
+          : mode === "ROAD"
+            ? found.originTerminal
+            : found.originPort ||
+            found.originAirport ||
+            found.originTerminal;
+
+    const destinationPortVal =
+      mode === "SEA"
+        ? found.destinationPort
+        : mode === "AIR"
+          ? found.destinationAirport
+          : mode === "ROAD"
+            ? found.destinationTerminal
+            : found.destinationPort ||
+            found.destinationAirport ||
+            found.destinationTerminal;
+
+    setForm((p) => ({
+      ...p,
+
+      enquiryNo: String(found.id),
+      enquiryDate: isoToDisplay(found.docDate || ""),
+
+      shipmentMode: plainLabel(found.shipmentMode),
+      movement: plainLabel(found.movement),
+
+      company: found.company || p.company || "",
+
+      originCity: cityLabel(found.fromLocation),
+      originCityId: idValue(found.fromLocation),
+      originPort: portLabel(originPortVal),
+      originPortId: idValue(originPortVal),
+      destinationCity: cityLabel(found.toLocation),
+      destinationCityId: idValue(found.toLocation),
+      destinationPort: portLabel(destinationPortVal),
+      destinationPortId: idValue(destinationPortVal),
+    }));
+
+    setErrors((prev) => ({
+      ...prev,
+      company: "",
+      shipmentMode: "",
+      movement: "",
+      originCity: "",
+      originPort: "",
+      destinationCity: "",
+      destinationPort: "",
+      submit: "",
+    }));
+  };
 
   const setField = (name, value, extra = {}) => {
     setForm((p) => ({ ...p, [name]: value, ...extra }));
@@ -616,29 +1090,29 @@ const QuotationForm = ({ onBack = () => {}, onSave, editData }) => {
       if (!String(form[name] ?? "").trim()) e[name] = `${label} is required`;
     };
 
-    req("quotationDate", "Date");
-    req("expirationDate", "Expiration date");
+    if (!displayToIso(form.quotationDate)) {
+      e.quotationDate = "Enter a valid date (dd-mm-yyyy)";
+    }
+    if (!displayToIso(form.expirationDate)) {
+      e.expirationDate = "Enter a valid date (dd-mm-yyyy)";
+    }
+
     req("company", "Company");
     req("service", "Service type");
     req("currency", "Currency");
     req("paymentTerms", "Payment terms");
     req("incoterm", "Incoterm");
-    req("originCode", "Origin code");
     req("originCity", "Origin city");
-    req("destinationCode", "Destination code");
+    req("originPort", "Origin port");
     req("destinationCity", "Destination city");
+    req("destinationPort", "Destination port");
     req("customerName", "Customer name");
 
-    if (
-      form.quotationDate &&
-      form.expirationDate &&
-      form.expirationDate < form.quotationDate
-    ) {
+    const qIso = displayToIso(form.quotationDate);
+    const eIso = displayToIso(form.expirationDate);
+    if (qIso && eIso && eIso < qIso) {
       e.expirationDate = "Must be on or after quotation date";
     }
-
-    if (form.originCode.length > 5) e.originCode = "Max 5 characters";
-    if (form.destinationCode.length > 5) e.destinationCode = "Max 5 characters";
 
     const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (form.customerEmail && !emailRe.test(form.customerEmail))
@@ -708,7 +1182,12 @@ const QuotationForm = ({ onBack = () => {}, onSave, editData }) => {
             "incoterm",
             "customerName",
           ],
-          2: ["originCode", "originCity", "destinationCode", "destinationCity"],
+          2: [
+            "originCity",
+            "originPort",
+            "destinationCity",
+            "destinationPort",
+          ],
           3: [],
         }[step] || [];
       if (stepErrors.some((f) => errors[f])) return;
@@ -740,12 +1219,11 @@ const QuotationForm = ({ onBack = () => {}, onSave, editData }) => {
       if (L > 0 && W > 0 && H > 0) {
         if (p.dimensionUnit === "in") volM3 = L * W * H * 0.0000163871;
         else if (p.dimensionUnit === "m") volM3 = L * W * H;
-        else volM3 = (L * W * H) / 1000000; // cm
+        else volM3 = (L * W * H) / 1000000;
       }
       const volumetricKg = volM3 * 167;
       const grossKg = p.weightUnit === "lb" ? weight * 0.45359237 : weight;
 
-      // ✅ Removed `id: p.id` to prevent 400 errors on update
       return {
         cargoDescription: p.cargoDescription || "",
         cargoType: p.cargoType || "",
@@ -763,7 +1241,6 @@ const QuotationForm = ({ onBack = () => {}, onSave, editData }) => {
       };
     });
 
-    // ✅ Removed `id: c.id` to prevent 400 errors on update
     const originCharges = form.originCharges.map((c) => ({
       chargeDescription: c.description || "",
       rate: numOrZero(c.rate),
@@ -776,7 +1253,6 @@ const QuotationForm = ({ onBack = () => {}, onSave, editData }) => {
       currency: cur,
     }));
 
-    // ✅ Removed `id: a.id` to prevent 400 errors on update
     const airFreightRates = airlines.map((a) => ({
       airlineName: a.airlineName || "",
       airlineCode: a.airlineCode || "",
@@ -825,7 +1301,9 @@ const QuotationForm = ({ onBack = () => {}, onSave, editData }) => {
       },
     ];
 
+    // ✅ Determine logic based on ID and Revision No
     const isUpdate = Boolean(form.id && form.id > 0);
+    const isRevision = form.revisionNo > 0;
 
     const payload = {
       orgId,
@@ -833,16 +1311,25 @@ const QuotationForm = ({ onBack = () => {}, onSave, editData }) => {
       createdBy: loginUserName,
       cancelRemarks: "",
 
+      enquiryNo: numOrZero(form.enquiryNo),
+      enquiryDate: displayToIso(form.enquiryDate) || null,
+      quotationDate: displayToIso(form.quotationDate) || null,
+
+      shipmentMode: form.shipmentMode || "",
+      movement: form.movement || "",
+
       companyName: form.company.trim(),
       serviceType: form.service || "",
       incoterm: form.incoterm || "",
       currency: Number(form.currency) || 0,
       paymentTerms: form.paymentTerms || "",
-      originCode: form.originCode.trim().toUpperCase(),
-      originCity: form.originCity || "",
-      destinationCode: form.destinationCode.trim().toUpperCase(),
-      destinationCity: form.destinationCity || "",
-      expirationDate: form.expirationDate,
+
+      originCity: numOrZero(form.originCityId),
+      originPort: numOrZero(form.originPortId),
+      destinationCity: numOrZero(form.destinationCityId),
+      destinationPort: numOrZero(form.destinationPortId),
+
+      expirationDate: displayToIso(form.expirationDate) || null,
       remarks: form.remarks || "",
       agentName: form.agentName || "",
 
@@ -853,8 +1340,22 @@ const QuotationForm = ({ onBack = () => {}, onSave, editData }) => {
       customerInformation,
     };
 
-    // ✅ Only include root `id` when updating
-    if (isUpdate) payload.id = form.id;
+    // ✅ Apply the DocId, Id, and RevisionNo logic
+    if (isUpdate) {
+      // Scenario: Edit existing record
+      payload.id = form.id;
+      payload.docId = form.quotationNo; // Existing docId
+      payload.revisionNo = form.revisionNo; // Usually 0
+    } else if (isRevision) {
+      // Scenario: Revise (Creates a new record with new DocId)
+      payload.docId = form.quotationNo; // NEW DocId from API
+      payload.revisionNo = form.revisionNo; // NEW Revision No from API
+      // No "id" field so it creates a new record
+    } else {
+      // Scenario: Create new from scratch
+      payload.docId = null;
+      // No "id" and no "revisionNo" fields
+    }
 
     return payload;
   };
@@ -878,8 +1379,6 @@ const QuotationForm = ({ onBack = () => {}, onSave, editData }) => {
         ...form,
         company: form.company.trim(),
         customerName: form.customerName.trim(),
-        originCode: form.originCode.trim().toUpperCase(),
-        destinationCode: form.destinationCode.trim().toUpperCase(),
         total: airlines.length
           ? Math.min(...airlines.map((a) => a.quotationTotal))
           : originTotal,
@@ -911,8 +1410,8 @@ const QuotationForm = ({ onBack = () => {}, onSave, editData }) => {
     if (!validate()) return;
     downloadQuotationPdf({
       ...form,
-      originCode: form.originCode.trim().toUpperCase(),
-      destinationCode: form.destinationCode.trim().toUpperCase(),
+      originPort: form.originPort,
+      destinationPort: form.destinationPort,
     });
   };
 
@@ -990,7 +1489,11 @@ const QuotationForm = ({ onBack = () => {}, onSave, editData }) => {
                 Quotation management
               </p>
               <h1 className="truncate text-sm font-bold">
-                {editData ? "Edit Quotation" : "Create Quotation"}
+                {form.revisionNo > 0
+                  ? `Revise Quotation`
+                  : editData
+                    ? "Edit Quotation"
+                    : "Create Quotation"}
               </h1>
             </div>
 
@@ -1020,19 +1523,16 @@ const QuotationForm = ({ onBack = () => {}, onSave, editData }) => {
                   onClick={() => goToStep(stepNo)}
                   disabled={!clickable}
                   aria-current={step === stepNo ? "step" : undefined}
-                  className={`text-left ${
-                    clickable ? "cursor-pointer" : "cursor-default"
-                  }`}
+                  className={`text-left ${clickable ? "cursor-pointer" : "cursor-default"
+                    }`}
                 >
                   <div
-                    className={`h-1 rounded-full transition ${
-                      step >= stepNo ? "bg-blue-400" : "bg-white/20"
-                    }`}
+                    className={`h-1 rounded-full transition ${step >= stepNo ? "bg-blue-400" : "bg-white/20"
+                      }`}
                   />
                   <p
-                    className={`mt-1 truncate text-[9px] ${
-                      step >= stepNo ? "text-white" : "text-slate-400"
-                    }`}
+                    className={`mt-1 truncate text-[9px] ${step >= stepNo ? "text-white" : "text-slate-400"
+                      }`}
                   >
                     {title}
                   </p>
@@ -1042,9 +1542,9 @@ const QuotationForm = ({ onBack = () => {}, onSave, editData }) => {
           </div>
         </header>
 
-        {/* Main Content */}
+        {/* Main */}
         <main className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-2">
-          {/* STEP 1: Quotation & Customer */}
+          {/* STEP 1 */}
           {step === 1 && (
             <div className="space-y-2">
               <Section
@@ -1060,18 +1560,49 @@ const QuotationForm = ({ onBack = () => {}, onSave, editData }) => {
                     disabled
                     error={errors.quotationNo}
                   />
-                  <TextField
+                  <DatePickerField
                     label="Quotation Date"
                     required
-                    type="date"
                     value={form.quotationDate}
                     onChange={(v) => setField("quotationDate", v)}
                     error={errors.quotationDate}
                   />
+
+                  <SearchableSelectField
+                    label="Enquiry No"
+                    value={form.enquiryNo}
+                    onChange={(v) => handleEnquirySelect(v)}
+                    options={enquiryOptions}
+                    placeholder={
+                      enquiryOptions.length ? "Search enquiry" : "No enquiries"
+                    }
+                    disabled={!enquiryOptions.length}
+                  />
+                  <DatePickerField
+                    label="Enquiry Date"
+                    value={form.enquiryDate}
+                    onChange={() => { }}
+                    disabled
+                  />
+
                   <TextField
+                    label="Shipment Mode"
+                    value={form.shipmentMode}
+                    onChange={() => { }}
+                    placeholder="Auto-filled from enquiry"
+                    disabled
+                  />
+                  <TextField
+                    label="Movement"
+                    value={form.movement}
+                    onChange={() => { }}
+                    placeholder="Auto-filled from enquiry"
+                    disabled
+                  />
+
+                  <DatePickerField
                     label="Expiration Date"
                     required
-                    type="date"
                     value={form.expirationDate}
                     onChange={(v) => setField("expirationDate", v)}
                     error={errors.expirationDate}
@@ -1124,7 +1655,7 @@ const QuotationForm = ({ onBack = () => {}, onSave, editData }) => {
                     label="Payment Terms"
                     required
                     maxLength={100}
-                    className="lg:col-span-3"
+                    className="lg:col-span-2"
                     value={form.paymentTerms}
                     onChange={(v) => setField("paymentTerms", v)}
                     placeholder="e.g. 30 days from invoice"
@@ -1137,46 +1668,106 @@ const QuotationForm = ({ onBack = () => {}, onSave, editData }) => {
                 <Section
                   icon={MapPin}
                   title="Shipment route"
-                  subtitle="Origin & destination"
+                  subtitle="Origin & destination (auto-filled from enquiry)"
                 >
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-[110px_1fr]">
-                    <TextField
-                      label="Origin Code"
-                      required
-                      maxLength={5}
-                      value={form.originCode}
-                      onChange={(v) => setField("originCode", v.toUpperCase())}
-                      placeholder="BCN"
-                      error={errors.originCode}
-                    />
-                    <TextField
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    <SearchableSelectField
                       label="Origin City"
                       required
-                      maxLength={100}
                       value={form.originCity}
-                      onChange={(v) => setField("originCity", v)}
-                      placeholder="Barcelona"
+                      onChange={(v) =>
+                        setField("originCity", v, {
+                          originCityId: "",
+                          originPort: "",
+                          originPortId: "",
+                        })
+                      }
+                      options={[
+                        ...new Set(
+                          ports.map((p) => cityLabel(p?.city)).filter(Boolean),
+                        ),
+                      ]}
+                      placeholder="Search origin city"
                       error={errors.originCity}
                     />
-                    <TextField
-                      label="Destination Code"
+                    <SelectField
+                      label="Origin Port"
                       required
-                      maxLength={5}
-                      value={form.destinationCode}
-                      onChange={(v) =>
-                        setField("destinationCode", v.toUpperCase())
+                      value={form.originPortId}
+                      onChange={(v) => {
+                        const rec = ports.find(
+                          (p) => String(p.id) === String(v),
+                        );
+                        setForm((prev) => ({
+                          ...prev,
+                          originPortId: v,
+                          originPort: rec
+                            ? `${rec.portName} (${rec.portCode})`
+                            : "",
+                        }));
+                        setErrors((prev) => ({
+                          ...prev,
+                          originPort: "",
+                          submit: "",
+                        }));
+                      }}
+                      options={originPortOptions}
+                      disabled={!form.originCity}
+                      placeholder={
+                        form.originCity
+                          ? "Select origin port"
+                          : "Select origin city first"
                       }
-                      placeholder="NBO"
-                      error={errors.destinationCode}
+                      error={errors.originPort}
                     />
-                    <TextField
+                    <SearchableSelectField
                       label="Destination City"
                       required
-                      maxLength={100}
                       value={form.destinationCity}
-                      onChange={(v) => setField("destinationCity", v)}
-                      placeholder="Nairobi"
+                      onChange={(v) =>
+                        setField("destinationCity", v, {
+                          destinationCityId: "",
+                          destinationPort: "",
+                          destinationPortId: "",
+                        })
+                      }
+                      options={[
+                        ...new Set(
+                          ports.map((p) => cityLabel(p?.city)).filter(Boolean),
+                        ),
+                      ]}
+                      placeholder="Search destination city"
                       error={errors.destinationCity}
+                    />
+                    <SelectField
+                      label="Destination Port"
+                      required
+                      value={form.destinationPortId}
+                      onChange={(v) => {
+                        const rec = ports.find(
+                          (p) => String(p.id) === String(v),
+                        );
+                        setForm((prev) => ({
+                          ...prev,
+                          destinationPortId: v,
+                          destinationPort: rec
+                            ? `${rec.portName} (${rec.portCode})`
+                            : "",
+                        }));
+                        setErrors((prev) => ({
+                          ...prev,
+                          destinationPort: "",
+                          submit: "",
+                        }));
+                      }}
+                      options={destinationPortOptions}
+                      disabled={!form.destinationCity}
+                      placeholder={
+                        form.destinationCity
+                          ? "Select destination port"
+                          : "Select destination city first"
+                      }
+                      error={errors.destinationPort}
                     />
                   </div>
                 </Section>
@@ -1242,7 +1833,7 @@ const QuotationForm = ({ onBack = () => {}, onSave, editData }) => {
             </div>
           )}
 
-          {/* STEP 2: Route & Shipment (packages) */}
+          {/* STEP 2 */}
           {step === 2 && (
             <div className="space-y-2">
               <Section
@@ -1414,7 +2005,7 @@ const QuotationForm = ({ onBack = () => {}, onSave, editData }) => {
             </div>
           )}
 
-          {/* STEP 3: Charges & Terms */}
+          {/* STEP 3 */}
           {step === 3 && (
             <div className="space-y-2">
               <Section
@@ -1910,9 +2501,11 @@ const QuotationForm = ({ onBack = () => {}, onSave, editData }) => {
               <Save size={14} />
               {submitting
                 ? "Saving..."
-                : editData?.id
-                  ? "Update quotation"
-                  : "Save quotation"}
+                : form.revisionNo > 0
+                  ? "Save Revision"
+                  : editData?.id
+                    ? "Update quotation"
+                    : "Save quotation"}
             </button>
           )}
         </footer>

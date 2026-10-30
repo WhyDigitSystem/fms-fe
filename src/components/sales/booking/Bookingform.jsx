@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   ArrowLeft,
   Box,
+  Calendar as CalendarIcon,
   Check,
   CheckCircle2,
   ChevronDown,
@@ -21,7 +22,6 @@ import {
   Printer,
   RotateCcw,
   Save,
-  Search,
   Send,
   Ship,
   Trash2,
@@ -34,14 +34,12 @@ import {
   ALLOWED_EXT,
   CONTAINER_ALLOCATIONS,
   CONTAINER_TYPES,
-  CURRENCIES,
   CURRENT_USER,
   DIM_UOMS,
   DOC_CATEGORIES,
   EQUIPMENT_PREFS,
   FREIGHT_TERMS,
   HANDLING,
-  INCOTERMS,
   MAX_FILE_SIZE,
   PACKAGE_TYPES,
   PAYMENT_TERMS,
@@ -50,9 +48,7 @@ import {
   WEIGHT_UOMS,
   WORKFLOW_STEPS,
   BOOKING_TYPES,
-  addresses,
   branches,
-  carriers,
   computeTotals,
   customers,
   emptyEquipment,
@@ -63,11 +59,6 @@ import {
   fmtSize,
   getService,
   hydrate,
-  locationByCode,
-  locationLabel,
-  locations,
-  parties,
-  quotations,
   snapshot,
   statusDots,
   statusStyles,
@@ -77,6 +68,9 @@ import {
   validateBooking,
 } from "./bookingData";
 import BookingAPI from "../../../api/sales/bookingAPI";
+import QuotationAPI from "../../../api/sales/quotationAPI";
+import currencyAPI from "../../../api/currencyAPI";
+import EnquiryAPI from "../../../api/sales/enquiryAPI";
 
 /* ------------------------------------------------------------------ */
 /* Styling tokens                                                      */
@@ -103,6 +97,75 @@ const modes = [
   { value: "Air", icon: Plane, hint: "Air freight" },
   { value: "Road", icon: Truck, hint: "Road transport" },
 ];
+
+// -------------------------------------------------------------
+// Date Helpers
+// -------------------------------------------------------------
+const pad2 = (n) => String(n).padStart(2, "0");
+
+const todayIso = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+};
+
+const isoToDisplay = (value) => {
+  if (value == null || value === "") return "";
+  const s = String(value).trim();
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return `${m[3]}-${m[2]}-${m[1]}`;
+  if (/^\d{2}-\d{2}-\d{4}$/.test(s)) return s;
+  const d = new Date(s);
+  if (!Number.isNaN(d.getTime())) {
+    return `${pad2(d.getDate())}-${pad2(d.getMonth() + 1)}-${d.getFullYear()}`;
+  }
+  return s;
+};
+
+const displayToIso = (value) => {
+  if (value == null || value === "") return "";
+  const s = String(value).trim();
+  const m = s.match(/^(\d{2})-(\d{2})-(\d{4})$/);
+  if (m) {
+    const [, dd, mm, yyyy] = m;
+    const d = Number(dd);
+    const mo = Number(mm);
+    const y = Number(yyyy);
+    if (d >= 1 && d <= 31 && mo >= 1 && mo <= 12 && y >= 1900 && y <= 3000) {
+      return `${yyyy}-${mm}-${dd}`;
+    }
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  return "";
+};
+
+const formatTyping = (val) => {
+  const digits = val.replace(/\D/g, "").slice(0, 8);
+  if (digits.length <= 2) return digits;
+  if (digits.length <= 4) return `${digits.slice(0, 2)}-${digits.slice(2)}`;
+  return `${digits.slice(0, 2)}-${digits.slice(2, 4)}-${digits.slice(4)}`;
+};
+
+const plainText = (v) => {
+  if (v == null || v === "") return "";
+  if (typeof v === "string" || typeof v === "number") return String(v);
+  if (typeof v === "object") {
+    if (v.city) return String(v.city);
+    if (v.portName) return String(v.portName);
+    if (v.currencyName) return String(v.currencyName);
+    if (v.branchCode) return String(v.branchCode);
+    if (v.customerName) return String(v.customerName);
+    if (v.id != null) return String(v.id);
+    return "";
+  }
+  return "";
+};
+
+const plainId = (v) => {
+  if (v == null || v === "") return "";
+  if (typeof v === "string" || typeof v === "number") return String(v);
+  if (typeof v === "object" && v.id != null) return String(v.id);
+  return "";
+};
 
 /* ------------------------------------------------------------------ */
 /* Small building blocks                                               */
@@ -186,6 +249,64 @@ const TextField = ({
   </Field>
 );
 
+/* ✅ Custom DatePickerField that visually shows dd-mm-yyyy */
+const DatePickerField = ({
+  label,
+  required,
+  error,
+  onChange,
+  value, // display format dd-mm-yyyy
+  disabled,
+  className = "",
+}) => {
+  const hiddenDateRef = useRef(null);
+
+  const handleTextChange = (e) => {
+    const formatted = formatTyping(e.target.value);
+    onChange?.(formatted);
+  };
+
+  const handleNativeDate = (e) => {
+    const iso = e.target.value;
+    if (iso) onChange?.(isoToDisplay(iso));
+  };
+
+  return (
+    <Field label={label} required={required} error={error} className={className}>
+      <div className="relative">
+        <input
+          type="text"
+          placeholder="dd-mm-yyyy"
+          value={value ?? ""}
+          disabled={disabled}
+          onChange={handleTextChange}
+          aria-invalid={!!error}
+          aria-required={required || undefined}
+          className={`${inputClass} pr-8 ${error ? errClass : ""}`}
+        />
+        {!disabled && (
+          <button
+            type="button"
+            onClick={() => hiddenDateRef.current?.showPicker()}
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-gray-200"
+            aria-label="Open date picker"
+          >
+            <CalendarIcon size={13} />
+          </button>
+        )}
+        <input
+          type="date"
+          ref={hiddenDateRef}
+          className="absolute bottom-0 right-0 h-0 w-0 opacity-0 pointer-events-none"
+          tabIndex={-1}
+          value={displayToIso(value) || ""}
+          onChange={handleNativeDate}
+        />
+      </div>
+    </Field>
+  );
+};
+
 const SelectField = ({
   label,
   required,
@@ -230,6 +351,174 @@ const SelectField = ({
   </Field>
 );
 
+/* ✅ Searchable combobox */
+const SearchableSelectField = ({
+  label,
+  required,
+  error,
+  value,
+  onChange,
+  options = [],
+  placeholder = "Search...",
+  disabled,
+  className = "",
+}) => {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const [rect, setRect] = useState(null);
+  const containerRef = useRef(null);
+  const inputRef = useRef(null);
+
+  const selectedLabel = useMemo(() => {
+    const found = options.find((opt) => {
+      const val = typeof opt === "string" ? opt : opt.value;
+      return String(val) === String(value);
+    });
+    if (!found) return "";
+    return typeof found === "string" ? found : found.label;
+  }, [options, value]);
+
+  const filtered = useMemo(() => {
+    const t = q.trim().toLowerCase();
+    const list = t
+      ? options.filter((opt) => {
+        const text =
+          typeof opt === "string" ? opt : `${opt.label} ${opt.value}`;
+        return text.toLowerCase().includes(t);
+      })
+      : options;
+    return list.slice(0, 100);
+  }, [options, q]);
+
+  const updateRect = () => {
+    if (inputRef.current) {
+      setRect(inputRef.current.getBoundingClientRect());
+    }
+  };
+
+  useEffect(() => {
+    const onDown = (e) => {
+      if (containerRef.current && !containerRef.current.contains(e.target)) {
+        setOpen(false);
+      }
+    };
+    const onScroll = () => {
+      if (open) updateRect();
+    };
+    document.addEventListener("mousedown", onDown);
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", onScroll);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", onScroll);
+    };
+  }, [open]);
+
+  const handleFocus = () => {
+    updateRect();
+    setQ("");
+    setOpen(true);
+  };
+
+  return (
+    <Field label={label} required={required} error={error} className={className}>
+      <div className="relative" ref={containerRef}>
+        <input
+          ref={inputRef}
+          type="text"
+          value={open ? q : selectedLabel}
+          placeholder={placeholder}
+          disabled={disabled}
+          aria-invalid={!!error}
+          aria-required={required || undefined}
+          onFocus={handleFocus}
+          onChange={(e) => {
+            setQ(e.target.value);
+            setOpen(true);
+            updateRect();
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              setOpen(false);
+              e.currentTarget.blur();
+            }
+            if (e.key === "Enter" && open && filtered.length === 1) {
+              e.preventDefault();
+              const opt = filtered[0];
+              onChange?.(typeof opt === "string" ? opt : opt.value);
+              setOpen(false);
+              e.currentTarget.blur();
+            }
+          }}
+          className={`${inputClass} pr-14 ${error ? "!border-red-500" : ""
+            }`}
+        />
+        {value && !disabled && (
+          <button
+            type="button"
+            aria-label="Clear selection"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => {
+              onChange?.("");
+              setOpen(false);
+            }}
+            className="absolute right-7 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-gray-200"
+          >
+            <X size={12} />
+          </button>
+        )}
+        <ChevronDown
+          size={12}
+          className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400"
+        />
+
+        {open && rect && (
+          <ul
+            style={{
+              position: "fixed",
+              top: rect.bottom + 4,
+              left: rect.left,
+              width: rect.width,
+              zIndex: 9999,
+            }}
+            className="max-h-52 overflow-auto rounded-md border border-slate-200 bg-white py-1 text-[11px] shadow-lg dark:border-gray-700 dark:bg-gray-900"
+          >
+            {filtered.length === 0 ? (
+              <li className="px-2.5 py-2 text-slate-500 dark:text-gray-400">
+                No matches
+              </li>
+            ) : (
+              filtered.map((opt) => {
+                const val = typeof opt === "string" ? opt : opt.value;
+                const lbl = typeof opt === "string" ? opt : opt.label;
+                return (
+                  <li key={val}>
+                    <button
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => {
+                        onChange?.(val);
+                        setOpen(false);
+                      }}
+                      className={`flex w-full items-center justify-between gap-2 px-2.5 py-1.5 text-left hover:bg-blue-50 dark:hover:bg-blue-500/10 ${String(val) === String(value)
+                          ? "bg-blue-50/60 font-semibold text-blue-700 dark:bg-blue-500/10 dark:text-blue-300"
+                          : "text-slate-700 dark:text-gray-200"
+                        }`}
+                    >
+                      <span className="truncate">{lbl}</span>
+                    </button>
+                  </li>
+                );
+              })
+            )}
+          </ul>
+        )}
+      </div>
+    </Field>
+  );
+};
+
 const TextAreaField = ({
   label,
   required,
@@ -251,122 +540,11 @@ const TextAreaField = ({
   </Field>
 );
 
-const LookupField = ({
-  label,
-  required,
-  error,
-  hint,
-  value,
-  onChange,
-  options = [],
-  placeholder = "Search...",
-  disabled,
-  className,
-}) => {
-  const [open, setOpen] = useState(false);
-  const [q, setQ] = useState("");
-  const selected = options.find((o) => o.value === value);
-
-  const filtered = useMemo(() => {
-    const t = q.trim().toLowerCase();
-    const list = t
-      ? options.filter((o) =>
-        `${o.label} ${o.sub || ""} ${o.value}`.toLowerCase().includes(t),
-      )
-      : options;
-    return list.slice(0, 50);
-  }, [options, q]);
-
-  return (
-    <Field
-      label={label}
-      required={required}
-      error={error}
-      hint={hint}
-      className={className}
-    >
-      <div className="relative">
-        <Search
-          size={13}
-          className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400"
-        />
-        <input
-          value={open ? q : (selected?.label ?? "")}
-          placeholder={placeholder}
-          disabled={disabled}
-          onFocus={() => {
-            setQ("");
-            setOpen(true);
-          }}
-          onChange={(e) => {
-            setQ(e.target.value);
-            setOpen(true);
-          }}
-          onBlur={() => setOpen(false)}
-          onKeyDown={(e) => {
-            if (e.key === "Escape") e.currentTarget.blur();
-            if (e.key === "Enter" && open && filtered.length === 1) {
-              e.preventDefault();
-              onChange(filtered[0].value);
-              e.currentTarget.blur();
-            }
-          }}
-          className={`${inputClass} pl-8 ${selected && !disabled ? "pr-8" : ""} ${error ? errClass : ""
-            }`}
-        />
-        {selected && !disabled && (
-          <button
-            type="button"
-            aria-label="Clear selection"
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={() => onChange("")}
-            className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-gray-200"
-          >
-            <X size={13} />
-          </button>
-        )}
-        {open && (
-          <ul className="absolute z-30 mt-1 max-h-52 w-full overflow-auto rounded-md border border-slate-200 bg-white py-1 text-[12px] shadow-lg dark:border-gray-700 dark:bg-gray-900">
-            {filtered.length === 0 ? (
-              <li className="px-2.5 py-2 text-slate-500 dark:text-gray-400">
-                No matches
-              </li>
-            ) : (
-              filtered.map((o) => (
-                <li key={o.value}>
-                  <button
-                    type="button"
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => {
-                      onChange(o.value);
-                      setOpen(false);
-                    }}
-                    className={`flex w-full items-center justify-between gap-2 px-2.5 py-1.5 text-left hover:bg-blue-50 dark:hover:bg-blue-500/10 ${o.value === value
-                      ? "bg-blue-50/60 font-semibold text-blue-700 dark:bg-blue-500/10 dark:text-blue-300"
-                      : "text-slate-700 dark:text-gray-200"
-                      }`}
-                  >
-                    <span className="truncate">{o.label}</span>
-                    {o.sub && (
-                      <span className="shrink-0 text-[10px] text-slate-400 dark:text-gray-500">
-                        {o.sub}
-                      </span>
-                    )}
-                  </button>
-                </li>
-              ))
-            )}
-          </ul>
-        )}
-      </div>
-    </Field>
-  );
-};
-
 const AmountField = ({
   label,
   error,
   currency,
+  currencyOptions = [],
   amount,
   onCurrency,
   onAmount,
@@ -379,9 +557,15 @@ const AmountField = ({
           onChange={(e) => onCurrency(e.target.value)}
           className={`${inputClass} appearance-none pr-6`}
         >
-          {CURRENCIES.map((c) => (
-            <option key={c}>{c}</option>
-          ))}
+          {currencyOptions.length === 0 ? (
+            <option value="">—</option>
+          ) : (
+            currencyOptions.map((c) => (
+              <option key={c.value} value={c.value}>
+                {c.label}
+              </option>
+            ))
+          )}
         </select>
         <ChevronDown
           size={12}
@@ -428,14 +612,14 @@ const ModeButton = ({ value, hint, icon: Icon, selected, onClick }) => (
     onClick={() => onClick(value)}
     aria-pressed={selected}
     className={`relative flex items-center gap-2 rounded-lg border px-3 py-2 text-left transition disabled:cursor-not-allowed disabled:opacity-60 ${selected
-      ? "border-blue-500 bg-blue-50 ring-1 ring-blue-500/40 dark:bg-blue-500/10"
-      : "border-slate-300 bg-white hover:border-slate-400 dark:border-gray-700 dark:bg-gray-900 dark:hover:border-gray-600"
+        ? "border-blue-500 bg-blue-50 ring-1 ring-blue-500/40 dark:bg-blue-500/10"
+        : "border-slate-300 bg-white hover:border-slate-400 dark:border-gray-700 dark:bg-gray-900 dark:hover:border-gray-600"
       }`}
   >
     <span
       className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md ${selected
-        ? "bg-blue-600 text-white"
-        : "bg-slate-100 text-slate-500 dark:bg-gray-800 dark:text-gray-400"
+          ? "bg-blue-600 text-white"
+          : "bg-slate-100 text-slate-500 dark:bg-gray-800 dark:text-gray-400"
         }`}
     >
       <Icon size={14} />
@@ -443,8 +627,8 @@ const ModeButton = ({ value, hint, icon: Icon, selected, onClick }) => (
     <span className="min-w-0">
       <span
         className={`block text-[12px] font-semibold ${selected
-          ? "text-blue-700 dark:text-blue-300"
-          : "text-slate-700 dark:text-gray-200"
+            ? "text-blue-700 dark:text-blue-300"
+            : "text-slate-700 dark:text-gray-200"
           }`}
       >
         {value}
@@ -554,8 +738,8 @@ const ActionModal = ({ config, busy, onClose, onSubmit }) => {
             onClick={submit}
             disabled={busy}
             className={`${btnBase} text-white ${config.danger
-              ? "bg-red-600 hover:bg-red-700"
-              : "bg-blue-600 hover:bg-blue-700"
+                ? "bg-red-600 hover:bg-red-700"
+                : "bg-blue-600 hover:bg-blue-700"
               }`}
           >
             {busy ? "Saving..." : config.confirmLabel}
@@ -634,7 +818,16 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
     [],
   ); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const [form, setForm] = useState(initial);
+  const [form, setForm] = useState(() => {
+    const base = editData ? hydrate(editData) : emptyForm();
+    return {
+      ...base,
+      bookingDate: isoToDisplay(base.bookingDate),
+      etd: isoToDisplay(base.etd),
+      eta: isoToDisplay(base.eta),
+    };
+  });
+
   const [errorList, setErrorList] = useState([]);
   const [notice, setNotice] = useState(null);
   const [busy, setBusy] = useState("");
@@ -646,9 +839,15 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
   const [dragOver, setDragOver] = useState(false);
   const [uploadMsgs, setUploadMsgs] = useState([]);
 
-  // ✅ New states for Doc ID & Record Loading
   const [loadingDocId, setLoadingDocId] = useState(false);
   const [recordLoading, setRecordLoading] = useState(false);
+
+  const [quotationRecords, setQuotationRecords] = useState([]);
+  const [quotationLoading, setQuotationLoading] = useState(false);
+
+  /* ✅ currency master list */
+  const [currencyList, setCurrencyList] = useState([]);
+  const [ports, setPorts] = useState([]);
 
   const savedRef = useRef(initial);
   const baselineRef = useRef(snapshot(initial));
@@ -658,12 +857,12 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
   const fileInputRef = useRef(null);
 
   const orgId = parseInt(localStorage.getItem("orgId")) || 1000000001;
+  const branchId = parseInt(localStorage.getItem("branchId")) || orgId;
   const loginUserName = localStorage.getItem("userName") || "SYSTEM";
 
   /* ---------- derived ---------- */
   const svc = getService(form.mode, form.serviceType);
   const customer = customers.find((c) => c.id === form.customer);
-  // ✅ Always editable
   const editable = true;
   const hasReefer =
     form.cargoLines.some((l) => l.reefer === "Yes") || !!svc?.reefer;
@@ -678,6 +877,8 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
     [errorList],
   );
   const dirty = snapshot(form) !== baselineRef.current;
+
+  const isFlowBooking = form.bookingSource === "Flow";
 
   const sections = [
     { id: "details", title: "Booking Details", icon: ClipboardList },
@@ -712,64 +913,54 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
         })),
     [form.branch, form.customer],
   );
-  const billingOptions = useMemo(
-    () =>
-      customers
-        .filter((c) => c.id === form.billingCustomer || c.active)
-        .map((c) => ({ value: c.id, label: `${c.name} (${c.id})` })),
-    [form.billingCustomer],
-  );
-  const partyOptions = useMemo(
-    () => parties.map((p) => ({ value: p.id, label: p.name, sub: p.id })),
-    [],
-  );
-  const notifyOptions = useMemo(
-    () => [{ value: "SAME", label: "Same as consignee" }, ...partyOptions],
-    [partyOptions],
-  );
-  const locOpt = (l) => ({
-    value: l.code,
-    label: `${l.name} (${l.code})`,
-    sub: l.type,
-  });
-  const gatewayOptions = useMemo(
-    () =>
-      locations
-        .filter((l) => l.modes.includes(form.mode) && l.role !== "inland")
-        .map(locOpt),
-    [form.mode],
-  );
-  const inlandOptions = useMemo(
-    () => locations.filter((l) => l.role !== "gateway").map(locOpt),
-    [],
-  );
-  const carrierOptions = useMemo(
-    () =>
-      carriers
-        .filter(
-          (c) =>
-            c.id === form.carrier || (c.active && c.modes.includes(form.mode)),
-        )
-        .map((c) => ({ value: c.id, label: c.name })),
-    [form.mode, form.carrier],
-  );
-  const addressOptionsFor = (partyId) =>
-    addresses
-      .filter((a) => a.partyId === partyId)
-      .map((a) => ({ value: a.id, label: a.label }));
+
   const quotationOptions = useMemo(
     () =>
-      quotations
-        .filter((q) => q.customerId === form.customer)
-        .map((q) => ({
-          value: q.id,
-          label: `${q.id} - ${q.currency} ${fmtNum(q.sell)}`,
-        })),
-    [form.customer],
+      quotationRecords.map((q) => ({
+        value: String(q.id),
+        label: q.docId || `Quotation ${q.id}`,
+        sub: q.docDate ? isoToDisplay(q.docDate) : undefined,
+      })),
+    [quotationRecords],
   );
-  const incotermOptions = INCOTERMS.filter(
-    (i) => !i.seaOnly || form.mode === "Sea",
-  ).map((i) => i.value);
+
+  const currencyOptions = useMemo(
+    () =>
+      currencyList.map((c) => ({
+        value: c.id != null ? String(c.id) : c.currency,
+        label: c.currency,
+      })),
+    [currencyList],
+  );
+
+  const findCurrencyByCode = (code) => {
+    if (!code) return "";
+    const found = currencyList.find(
+      (c) => String(c.currency || "").toUpperCase() === String(code).toUpperCase(),
+    );
+    return found ? (found.id != null ? String(found.id) : found.currency) : "";
+  };
+
+  const currencyCodeFor = (value) => {
+    const found = currencyList.find(
+      (c) => String(c.id) === String(value) || String(c.currency) === String(value),
+    );
+    return found?.currency || value || "";
+  };
+
+  // ✅ Port options for the searchable select based on selected mode
+  const portOptions = useMemo(() => {
+    const modeUpper = String(form.mode || "").trim().toUpperCase();
+    return ports
+      .filter((p) => {
+        const pType = String(p?.portType || "").trim().toUpperCase();
+        return pType === modeUpper;
+      })
+      .map((p) => ({
+        value: String(p.id),
+        label: `${p.portName} (${p.portCode})`,
+      }));
+  }, [ports, form.mode]);
 
   const portLabels = {
     Sea: ["Origin (Port / ICD)", "Destination (Port / ICD)"],
@@ -777,7 +968,6 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
     Road: ["Origin (Terminal / Depot)", "Destination (Terminal / Depot)"],
   }[form.mode];
 
-  /* ---------- effects ---------- */
   useEffect(() => {
     if (!notice || notice.type === "error") return undefined;
     const t = setTimeout(() => setNotice(null), 4500);
@@ -825,10 +1015,27 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
     return () => io.disconnect();
   }, [sectionKey]);
 
-  /* ---------- ✅ Fetch DocId on create ---------- */
+  /* ---------- ✅ Fetch currencies & ports ---------- */
+  useEffect(() => {
+    const run = async () => {
+      try {
+        const [currData, portData] = await Promise.all([
+          currencyAPI.getAllCurrencies(orgId),
+          EnquiryAPI.getPortByOrgIdAndBranch(orgId, branchId)
+        ]);
+        setCurrencyList(Array.isArray(currData) ? currData : []);
+        setPorts(Array.isArray(portData) ? portData : []);
+      } catch (err) {
+        console.error("Failed to fetch currencies/ports:", err);
+      }
+    };
+    run();
+  }, [orgId, branchId]);
+
+  /* ---------- DocId on create ---------- */
   useEffect(() => {
     const fetchDocId = async () => {
-      if (form.id) return; // Skip if editing
+      if (form.id) return;
       try {
         setLoadingDocId(true);
         const docId = await BookingAPI.getBookingDocId(orgId);
@@ -843,7 +1050,7 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orgId, form.id]);
 
-  /* ---------- ✅ Fetch Full Record on Edit ---------- */
+  /* ---------- Full record on edit ---------- */
   useEffect(() => {
     const fetchRecord = async () => {
       if (!editData?.id) return;
@@ -853,7 +1060,6 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
         const response = await BookingAPI.getBookingById(editData.id);
         if (!response) return;
 
-        // Unwrap the nested bookingVO response
         const record =
           response?.paramObjectsMap?.bookingVO ||
           response?.bookingVO ||
@@ -870,7 +1076,6 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
         const equipment = record.equipmentDetails?.[0] || {};
         const instruction = record.instructionDetails?.[0] || {};
 
-        // Map cargo lines
         const cargoLines = (record.cargoDetails || []).map((c) => ({
           id: uid(),
           commodity: c.commodityDescription || "",
@@ -879,20 +1084,18 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
           weight: c.grossWeight?.toString() || "",
           weightUom: c.weightUnit || "kg",
           volume: c.volume?.toString() || "",
-          volumeUom:
-            c.volumeUnit === "CBM" ? "m³" : c.volumeUnit || "m³",
+          volumeUom: c.volumeUnit === "CBM" ? "m³" : c.volumeUnit || "m³",
           length: c.length?.toString() || "",
           width: c.width?.toString() || "",
           height: c.height?.toString() || "",
           dimUom: c.dimensionUnit || "cm",
-          hsCode: "", // API doesn't return hsCode
+          hsCode: "",
           dg: c.hazardous ? "Yes" : "No",
           reefer: c.equipmentType === "Reefer" ? "Yes" : "No",
           handling: [],
           remarks: c.remarks || "",
         }));
 
-        // ✅ Map existing uploaded files from instructionDetails
         const existingFiles = (record.instructionDetails || [])
           .filter((d) => d.document)
           .map((d) => ({
@@ -901,8 +1104,8 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
             size: d.fileSize || 0,
             category: d.documentType || DOC_CATEGORIES[0],
             url: d.document,
-            file: null, // no local File object
-            isExisting: true, // flag to avoid re-upload
+            file: null,
+            isExisting: true,
             uploadedOn: d.uploadOn || null,
             contentType: d.contentType || null,
           }));
@@ -910,10 +1113,13 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
         setForm({
           id: record.id,
           bookingNo: record.docId || "",
-          bookingDate: record.docDate || today(),
+          bookingDate: isoToDisplay(record.docDate || today()),
           branch: record.branch?.branchCode || CURRENT_USER.branch,
           status: record.bookingStatus || "Draft",
           bookingType: record.bookingType || "Export",
+          bookingSource: record.bookingSource || "Direct",
+          quotationNo: record.quotationNo || "",
+          quotationDate: isoToDisplay(record.quotationDate || ""),
           mode: record.transportMode || "Sea",
           serviceType: record.serviceType || "",
           customer: record.customer || "",
@@ -924,15 +1130,15 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
           pickupRequired: !!routing.placeOfReceipt,
           deliveryRequired: !!routing.placeOfDelivery,
           placeOfReceipt: routing.placeOfReceipt || "",
-          origin: routing.origin || "",
-          destination: routing.destination || "",
+          origin: routing.originPort ? String(routing.originPort) : "",
+          destination: routing.destinationPort ? String(routing.destinationPort) : "",
           placeOfDelivery: routing.placeOfDelivery || "",
-          etd: routing.requestedETD || "",
-          eta: routing.requestedETA || "",
+          etd: isoToDisplay(routing.requestedETD || ""),
+          eta: isoToDisplay(routing.requestedETA || ""),
           carrier: routing.carrierPreference || "",
           routingPref: routing.routingPreference || "",
           incoterm: routing.incoterm || "",
-          incotermPlace: "", // Not returned
+          incotermPlace: "",
 
           shipper: party.shipper || "",
           consignee: party.consignee || "",
@@ -961,11 +1167,20 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
           commercial: {
             freightTerms: commercial.freightPaymentTerms || "",
             quotationRef: commercial.quotationReference || "",
-            sellCurrency: commercial.sellCurrency || "USD",
+            sellCurrency:
+              findCurrencyByCode(commercial.sellCurrency) ||
+              commercial.sellCurrency ||
+              "",
             sellRate: commercial.sellRate?.toString() || "",
-            buyCurrency: commercial.buyCurrency || "USD",
+            buyCurrency:
+              findCurrencyByCode(commercial.buyCurrency) ||
+              commercial.buyCurrency ||
+              "",
             buyRate: commercial.buyRate?.toString() || "",
-            currency: commercial.sellCurrency || "USD",
+            currency:
+              findCurrencyByCode(commercial.sellCurrency) ||
+              commercial.sellCurrency ||
+              "",
             paymentTerms: commercial.paymentTerms || "",
             remarks: commercial.commercialRemarks || "",
           },
@@ -989,8 +1204,28 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
       }
     };
     fetchRecord();
-  }, [editData?.id]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editData?.id, currencyList.length]);
 
+  /* ---------- Fetch quotations when Flow chosen ---------- */
+  useEffect(() => {
+    if (!isFlowBooking || quotationRecords.length) return;
+    const run = async () => {
+      try {
+        setQuotationLoading(true);
+        const res = await QuotationAPI.getQuotationByOrgIdAndBranch(
+          branchId,
+          orgId,
+        );
+        setQuotationRecords(Array.isArray(res) ? res : []);
+      } catch (err) {
+        console.error("Failed to load quotations:", err);
+      } finally {
+        setQuotationLoading(false);
+      }
+    };
+    run();
+  }, [isFlowBooking, quotationRecords.length, branchId, orgId]);
 
   /* ---------- helpers ---------- */
   const scrollToSection = (id) => {
@@ -1063,10 +1298,6 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
       origin: "",
       destination: "",
       carrier: "",
-      incoterm:
-        INCOTERMS.find((i) => i.value === p.incoterm)?.seaOnly && mode !== "Sea"
-          ? ""
-          : p.incoterm,
       pickupRequired: mode === "Road",
       deliveryRequired: mode === "Road",
       equipment: emptyEquipment(),
@@ -1105,44 +1336,115 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
     clearErr((k) => ["branch", "customer"].includes(k));
   };
 
-  const changeCustomer = (id) => {
-    const c = customers.find((x) => x.id === id);
+  const changeBookingSource = (source) => {
+    if (source === form.bookingSource) return;
     setForm((p) => ({
       ...p,
-      customer: id,
-      billingCustomer: !id
-        ? p.billingCustomer
-        : !p.billingCustomer || p.billingCustomer === p.customer
-          ? id
-          : p.billingCustomer,
-      salesperson: salesTouched.current
-        ? p.salesperson
-        : c?.salesperson || CURRENT_USER.id,
-      commercial: {
-        ...p.commercial,
-        quotationRef: "",
-        paymentTerms: c ? c.paymentTerms : p.commercial.paymentTerms,
-      },
+      bookingSource: source,
+      quotationNo: "",
+      quotationDate: "",
     }));
-    clearErr((k) => ["customer", "billingCustomer", "credit"].includes(k));
+    setErrorList([]);
   };
 
-  const changeQuotation = (id) => {
-    const q = quotations.find((x) => x.id === id);
+  /* ---------- Apply a quotation → fill the booking ---------- */
+  const applyQuotation = (quotationId) => {
+    const q = quotationRecords.find((x) => String(x.id) === String(quotationId));
+    if (!q) {
+      setForm((p) => ({ ...p, quotationNo: quotationId, quotationDate: "" }));
+      return;
+    }
+
+    const qMode = String(q.shipmentMode || "").toUpperCase();
+    const mode =
+      qMode === "SEA"
+        ? "Sea"
+        : qMode === "AIR"
+          ? "Air"
+          : qMode === "ROAD"
+            ? "Road"
+            : form.mode;
+
+    const originTerminalId = plainId(q.originPort) || plainId(q.originTerminal);
+    const destinationTerminalId = plainId(q.destinationPort) || plainId(q.destinationTerminal);
+
+    const ci = q.customerInformation?.[0] || {};
+    const quoteCustomerName = ci.customerName || q.companyName || "";
+
+    const matchedCustomer = customers.find(
+      (c) =>
+        String(c.name || "").trim().toLowerCase() ===
+        String(quoteCustomerName || "").trim().toLowerCase(),
+    );
+
+    const cargoLines = (q.shippingDetails || []).map((s) => ({
+      id: uid(),
+      commodity: s.cargoDescription || s.cargoType || "",
+      pkgType: "",
+      qty: s.quantity != null ? String(s.quantity) : "",
+      weight: s.packageWeight != null ? String(s.packageWeight) : "",
+      weightUom: s.weightUnit || "kg",
+      volume: s.totalVolumeCbm != null ? String(s.totalVolumeCbm) : "",
+      volumeUom: "m³",
+      length: s.length != null ? String(s.length) : "",
+      width: s.width != null ? String(s.width) : "",
+      height: s.height != null ? String(s.height) : "",
+      dimUom: s.dimensionUnit || "cm",
+      hsCode: "",
+      dg: "No",
+      reefer: "No",
+      handling: [],
+      remarks: s.cargoType || "",
+    }));
+
+    const ct = q.commercialTerms?.[0] || {};
+    const qCurrencyCode = plainText(q.currency);
+
     setForm((p) => ({
       ...p,
+      bookingSource: "Flow",
+      quotationNo: String(q.id),
+      quotationDate: isoToDisplay(q.docDate),
+
+      mode,
+      serviceType: q.serviceType || "",
+
+      customer: matchedCustomer?.id || p.customer,
+      billingCustomer: matchedCustomer?.id || p.billingCustomer,
+      customerRef: q.enquiryNo ? `ENQ-${q.enquiryNo}` : p.customerRef,
+
+      origin: originTerminalId || p.origin,
+      destination: destinationTerminalId || p.destination,
+
+      contactPerson: ci.customerName || p.contactPerson,
+      email: ci.customerEmail || p.email,
+      phone: ci.customerPhone || p.phone,
+
+      incoterm: q.incoterm || p.incoterm,
       commercial: {
         ...p.commercial,
-        quotationRef: id,
-        ...(q && !p.commercial.sellRate
-          ? {
-            sellRate: String(q.sell),
-            sellCurrency: q.currency,
-            currency: p.commercial.currency || q.currency,
-          }
-          : {}),
+        paymentTerms: q.paymentTerms || p.commercial.paymentTerms,
+        sellCurrency:
+          findCurrencyByCode(qCurrencyCode) || p.commercial.sellCurrency,
+        currency:
+          findCurrencyByCode(qCurrencyCode) || p.commercial.currency,
+        remarks: q.remarks || p.commercial.remarks,
+        quotationRef: String(q.id),
+        sellRate:
+          ct.airlineQuotationTotal != null
+            ? String(ct.airlineQuotationTotal)
+            : p.commercial.sellRate,
       },
+
+      cargoLines: cargoLines.length ? cargoLines : [emptyLine()],
+      customerDisplayName: quoteCustomerName,
     }));
+
+    setErrorList([]);
+    setNotice({
+      type: "success",
+      text: `Quotation ${q.docId || q.id} applied to the booking.`,
+    });
   };
 
   /* ---------- documents ---------- */
@@ -1201,27 +1503,7 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
   const runSave = async (action) => {
     if (busyRef.current || !editable) return null;
 
-    const { list } = validateBooking(
-      form,
-      action === "submit" ? "submit" : "draft",
-    );
-    // setErrorList(list);
-
-    // if (list.length) {
-    //   const open = {};
-    //   list.forEach((e) => {
-    //     const m = /^line\.([^.]+)\.(length|width|height|hsCode)$/.exec(e.key);
-    //     if (m) open[m[1]] = true;
-    //   });
-    //   setExpanded((p) => ({ ...p, ...open }));
-    //   setNotice({
-    //     type: "error",
-    //     text: `Please fix ${list.length} issue${list.length > 1 ? "s" : ""} before ${action === "submit" ? "submitting" : "saving"
-    //       }.`,
-    //   });
-    //   scrollToSection(list[0].section);
-    //   return null;
-    // }
+    validateBooking(form, action === "submit" ? "submit" : "draft");
 
     busyRef.current = true;
     setBusy(action);
@@ -1229,7 +1511,6 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
     try {
       const isUpdate = Boolean(form.id && form.id > 0);
 
-      // ✅ Build API payload (bookingDTO)
       const apiPayload = {
         orgId,
         createdBy: loginUserName,
@@ -1237,6 +1518,9 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
         bookingStatus:
           action === "submit" ? "Submitted" : form.status || "Draft",
         bookingType: form.bookingType || "Standard",
+        bookingSource: form.bookingSource || "Direct",
+        quotationNo: form.quotationNo || "",
+        quotationDate: displayToIso(form.quotationDate) || null,
         transportMode: form.mode || "",
         serviceType: form.serviceType || "",
         salesperson: form.salesperson || "",
@@ -1244,20 +1528,18 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
         customer: form.customer || "",
         customerReference: form.customerRef || "",
         remarks: form.commercial?.remarks || "",
-
-        // ✅ Added bookingNo to payload
         bookingNo: form.bookingNo || "",
 
         routingDetails: [
           {
             carrierPreference: form.carrier || "",
-            destination: form.destination || "",
+            originPort: Number(form.origin) || 0,
+            destinationPort: Number(form.destination) || 0,
             incoterm: form.incoterm || "",
-            origin: form.origin || "",
             placeOfDelivery: form.placeOfDelivery || "",
             placeOfReceipt: form.placeOfReceipt || "",
-            requestedETA: form.eta || null,
-            requestedETD: form.etd || null,
+            requestedETA: displayToIso(form.eta) || null,
+            requestedETD: displayToIso(form.etd) || null,
             routingPreference: form.routingPref || "",
           },
         ],
@@ -1281,15 +1563,15 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
           dimensionUnit: line.dimUom || "cm",
           grossWeight: Number(line.weight) || 0,
           hazardous: line.dg === "Yes",
-          hazardousClass: "", // Missing in UI
+          hazardousClass: "",
           height: Number(line.height) || 0,
           length: Number(line.length) || 0,
-          marksAndNumbers: "", // Missing in UI
-          netWeight: 0, // Missing in UI
+          marksAndNumbers: "",
+          netWeight: 0,
           packageCount: Number(line.qty) || 0,
           packageType: line.pkgType || "",
           remarks: line.remarks || "",
-          unNumber: "", // Missing in UI
+          unNumber: "",
           volume: Number(line.volume) || 0,
           volumeUnit: line.volumeUom === "m³" ? "CBM" : line.volumeUom || "CBM",
           weightUnit: line.weightUom || "kg",
@@ -1300,11 +1582,11 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
           {
             containerNumber: "",
             containerType: form.equipment?.containerType || "",
-            equipmentSize: "", // Missing in UI
+            equipmentSize: "",
             equipmentType: form.equipment?.equipPref || "",
-            humidityRequired: false, // Missing in UI
-            humidityValue: 0, // Missing in UI
-            isoCode: "", // Missing in UI
+            humidityRequired: false,
+            humidityValue: 0,
+            isoCode: "",
             quantity: Number(form.equipment?.containerQty) || 0,
             remarks: "",
             specialEquipment: false,
@@ -1318,14 +1600,15 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
 
         commercialDetails: [
           {
-            buyCurrency: form.commercial?.buyCurrency || "USD",
+            buyCurrency: currencyCodeFor(form.commercial?.buyCurrency) || "USD",
             buyRate: Number(form.commercial?.buyRate) || 0,
             commercialRemarks: form.commercial?.remarks || "",
             creditCheckStatus: "Approved",
             freightPaymentTerms: form.commercial?.freightTerms || "",
             paymentTerms: form.commercial?.paymentTerms || "",
             quotationReference: form.commercial?.quotationRef || "",
-            sellCurrency: form.commercial?.sellCurrency || "USD",
+            sellCurrency:
+              currencyCodeFor(form.commercial?.sellCurrency) || "USD",
             sellRate: Number(form.commercial?.sellRate) || 0,
           },
         ],
@@ -1334,7 +1617,7 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
           {
             commercialInvoice: "",
             customerReferenceDocument: "",
-            dangerousGoodsDocument: "", // Not required anymore
+            dangerousGoodsDocument: "",
             deliveryInstructions: form.docs?.deliveryInstructions || "",
             internalRemarks: form.docs?.internalRemarks || "",
             packingList: "",
@@ -1343,16 +1626,12 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
         ],
       };
 
-      // ✅ Only include `id` when updating an existing booking
       if (isUpdate) apiPayload.id = form.id;
 
-      // ✅ Extract actual File objects from the form state
-      // Existing server-side files have file: null, so they are skipped
       const filesToUpload = (form.docs?.files || [])
         .map((f) => f.file)
         .filter(Boolean);
 
-      // ✅ Call API using FormData
       const res = await BookingAPI.createUpdateBooking(
         apiPayload,
         filesToUpload,
@@ -1410,9 +1689,7 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
 
   const handleSubmit = async () => {
     const saved = await runSave("submit");
-    if (saved) {
-      onBack();
-    }
+    if (saved) onBack();
   };
 
   const handleSaveNew = async () => {
@@ -1597,12 +1874,9 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
         {
           name: "carrier",
           label: "Carrier",
-          type: "select",
+          type: "text",
           required: true,
           initial: form.carrier,
-          options: carriers
-            .filter((c) => c.active && c.modes.includes(form.mode))
-            .map((c) => ({ value: c.id, label: c.name })),
         },
         {
           name: "reference",
@@ -1711,25 +1985,27 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
     const c = form.commercial;
     const sell = Number(c.sellRate);
     const buy = Number(c.buyRate);
-    if (!sell || !buy || c.sellCurrency !== c.buyCurrency) return null;
+    if (!sell || !buy) return null;
     return {
       amount: sell - buy,
       pct: ((sell - buy) / sell) * 100,
-      cur: c.sellCurrency,
+      cur: currencyCodeFor(c.sellCurrency) || "",
     };
   })();
 
   const summaryRows = [
     ["Mode", form.mode],
     ["Service", form.serviceType || "-"],
-    ["Origin", form.origin ? locationByCode(form.origin)?.code : "-"],
-    [
-      "Destination",
-      form.destination ? locationByCode(form.destination)?.code : "-",
-    ],
+    ["Origin", form.origin || "-"],
+    ["Destination", form.destination || "-"],
     ["ETD", form.etd || "-"],
     ["ETA", form.eta || "-"],
-    ["Customer", customer?.name || "-"],
+    [
+      "Customer",
+      isFlowBooking
+        ? form.customerDisplayName || customer?.name || "-"
+        : customer?.name || "-",
+    ],
     ["Packages", totals.packageText],
     ["Gross Weight", totals.weightKg ? `${fmtNum(totals.weightKg)} kg` : "-"],
     ["Volume", totals.volumeM3 ? `${fmtNum(totals.volumeM3, 3)} m³` : "-"],
@@ -1743,8 +2019,19 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
       <div className="flex h-[90dvh] w-full items-center justify-center bg-slate-50 dark:bg-gray-950">
         <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-gray-300">
           <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            <circle
+              className="opacity-25"
+              cx="12"
+              cy="12"
+              r="10"
+              stroke="currentColor"
+              strokeWidth="4"
+            />
+            <path
+              className="opacity-75"
+              fill="currentColor"
+              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+            />
           </svg>
           Loading booking...
         </div>
@@ -1797,10 +2084,9 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
               error={errors.bookingNo}
               className="w-[180px]"
             />
-            <TextField
+            <DatePickerField
               label="Booking Date"
               required
-              type="date"
               className="w-[140px]"
               value={form.bookingDate}
               onChange={(v) => set("bookingDate", v)}
@@ -1832,8 +2118,8 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
           <div
             role="status"
             className={`mb-2 flex items-start justify-between gap-2 rounded-md border px-3 py-2 text-[12px] ${notice.type === "error"
-              ? "border-red-200 bg-red-50 text-red-700 dark:border-red-900/60 dark:bg-red-900/20 dark:text-red-300"
-              : "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-900/20 dark:text-emerald-300"
+                ? "border-red-200 bg-red-50 text-red-700 dark:border-red-900/60 dark:bg-red-900/20 dark:text-red-300"
+                : "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-900/20 dark:text-emerald-300"
               }`}
           >
             <span className="flex items-center gap-1.5">
@@ -1865,8 +2151,8 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
               type="button"
               onClick={() => scrollToSection(s.id)}
               className={`flex shrink-0 items-center gap-1.5 border-b-2 px-2.5 py-2 text-[11px] font-semibold transition ${activeTab === s.id
-                ? "border-blue-600 text-blue-700 dark:border-blue-400 dark:text-blue-300"
-                : "border-transparent text-slate-500 hover:text-slate-800 dark:text-gray-400 dark:hover:text-gray-200"
+                  ? "border-blue-600 text-blue-700 dark:border-blue-400 dark:text-blue-300"
+                  : "border-transparent text-slate-500 hover:text-slate-800 dark:text-gray-400 dark:hover:text-gray-200"
                 }`}
             >
               <s.icon size={13} />
@@ -1895,22 +2181,85 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
                   options={BOOKING_TYPES}
                   error={errors.bookingType}
                 />
-                <LookupField
+
+                <SelectField
+                  label="Booking Source"
+                  required
+                  value={form.bookingSource || "Direct"}
+                  onChange={changeBookingSource}
+                  options={[
+                    { value: "Direct", label: "Direct" },
+                    { value: "Flow", label: "Flow" },
+                  ]}
+                  error={errors.bookingSource}
+                />
+
+                <TextField
                   label="Customer"
                   required
                   className="lg:col-span-2"
-                  value={form.customer}
-                  onChange={changeCustomer}
-                  options={customerOptions}
-                  placeholder="Search active customers for this branch"
+                  value={
+                    isFlowBooking
+                      ? form.customerDisplayName || customer?.name || ""
+                      : form.customerDisplayName || customer?.name || form.customer || ""
+                  }
+                  onChange={(v) => {
+                    if (isFlowBooking) return;
+                    const matched = customers.find(
+                      (c) =>
+                        String(c.name || "").trim().toLowerCase() ===
+                        String(v || "").trim().toLowerCase(),
+                    );
+                    setForm((p) => ({
+                      ...p,
+                      customerDisplayName: v,
+                      customer: matched?.id || p.customer,
+                      billingCustomer: matched?.id || p.billingCustomer,
+                    }));
+                  }}
+                  placeholder={
+                    isFlowBooking
+                      ? "Auto-filled from quotation"
+                      : "Enter customer name"
+                  }
+                  disabled={isFlowBooking}
                   error={errors.customer}
                 />
+
                 <TextField
                   label="Customer Reference"
                   value={form.customerRef}
                   onChange={(v) => set("customerRef", v)}
                   placeholder="e.g. PO12345"
                 />
+
+                {isFlowBooking && (
+                  <>
+                    <SelectField
+                      label="Quotation No"
+                      required
+                      value={form.quotationNo}
+                      onChange={applyQuotation}
+                      options={quotationOptions}
+                      placeholder={
+                        quotationLoading
+                          ? "Loading quotations..."
+                          : quotationOptions.length
+                            ? "Select quotation"
+                            : "No quotations available"
+                      }
+                      disabled={quotationLoading || !quotationOptions.length}
+                      error={errors.quotationNo}
+                    />
+                    <TextField
+                      label="Quotation Date"
+                      value={form.quotationDate || ""}
+                      placeholder="Auto-filled"
+                      disabled
+                      className="lg:col-span-1"
+                    />
+                  </>
+                )}
               </div>
 
               <div className="mt-2.5">
@@ -1938,24 +2287,21 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
                   options={(SERVICES[form.mode] || []).map((s) => s.value)}
                   error={errors.serviceType}
                 />
-                <SelectField
+                <TextField
                   label="Salesperson"
-                  required={false}
                   value={form.salesperson}
                   onChange={(v) => {
                     salesTouched.current = true;
                     set("salesperson", v);
                   }}
-                  options={users}
+                  placeholder="Enter salesperson"
                   error={errors.salesperson}
-                  placeholder="Select user"
                 />
-                <SelectField
+                <TextField
                   label="Operations Owner"
                   value={form.opsOwner}
                   onChange={(v) => set("opsOwner", v)}
-                  options={users}
-                  placeholder="Select user"
+                  placeholder="Enter operations owner"
                 />
               </div>
             </Section>
@@ -1978,44 +2324,39 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
               </div>
 
               <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
-                <LookupField
+                <TextField
                   label="Place of Receipt"
                   required={form.pickupRequired}
                   value={form.placeOfReceipt}
                   onChange={(v) => set("placeOfReceipt", v)}
-                  options={inlandOptions}
                   placeholder="Depot / warehouse / door"
                   error={errors.placeOfReceipt}
                 />
-                <TextField
+                <DatePickerField
                   label="Requested ETD"
-                  type="date"
                   value={form.etd}
                   onChange={(v) => set("etd", v)}
                   error={errors.etd}
                 />
-                <SelectField
+                <TextField
                   label="Incoterm"
                   value={form.incoterm}
                   onChange={(v) => set("incoterm", v)}
-                  options={incotermOptions}
+                  placeholder="e.g. FOB"
                   error={errors.incoterm}
-                  required={false}
                 />
 
-                <LookupField
+                <SearchableSelectField
                   label={portLabels[0]}
                   required
                   value={form.origin}
                   onChange={(v) => set("origin", v)}
-                  options={gatewayOptions}
-                  placeholder={`Search ${form.mode.toLowerCase()} locations`}
+                  options={portOptions}
+                  placeholder="Search port"
                   error={errors.origin}
                 />
-                <TextField
+                <DatePickerField
                   label="Requested ETA"
-                  type="date"
-                  min={form.etd || undefined}
                   value={form.eta}
                   onChange={(v) => set("eta", v)}
                   error={errors.eta}
@@ -2028,21 +2369,20 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
                   error={errors.incotermPlace}
                 />
 
-                <LookupField
+                <SearchableSelectField
                   label={portLabels[1]}
                   required
                   value={form.destination}
                   onChange={(v) => set("destination", v)}
-                  options={gatewayOptions}
-                  placeholder={`Search ${form.mode.toLowerCase()} locations`}
+                  options={portOptions}
+                  placeholder="Search port"
                   error={errors.destination}
                 />
-                <LookupField
+                <TextField
                   label="Carrier Preference"
                   value={form.carrier}
                   onChange={(v) => set("carrier", v)}
-                  options={carrierOptions}
-                  placeholder="Select carrier"
+                  placeholder="Enter carrier"
                 />
                 <TextField
                   label="Routing Preference"
@@ -2051,12 +2391,11 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
                   placeholder="e.g. Via Busan"
                 />
 
-                <LookupField
+                <TextField
                   label="Place of Delivery"
                   required={form.deliveryRequired}
                   value={form.placeOfDelivery}
                   onChange={(v) => set("placeOfDelivery", v)}
-                  options={inlandOptions}
                   placeholder="Depot / warehouse / door"
                   error={errors.placeOfDelivery}
                 />
@@ -2066,60 +2405,52 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
             {/* 3. Parties */}
             <Section id="parties" icon={Users} title={titleOf("parties")}>
               <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
-                <LookupField
+                <TextField
                   label="Shipper"
                   required
                   value={form.shipper}
                   onChange={(v) => set("shipper", v, { pickupAddress: "" })}
-                  options={partyOptions}
+                  placeholder="Shipper name"
                   error={errors.shipper}
                 />
-                <LookupField
+                <TextField
                   label="Consignee"
                   required
                   value={form.consignee}
                   onChange={(v) => set("consignee", v, { deliveryAddress: "" })}
-                  options={partyOptions}
+                  placeholder="Consignee name"
                   error={errors.consignee}
                 />
-                <LookupField
+                <TextField
                   label="Notify Party"
                   value={form.notifyParty}
                   onChange={(v) => set("notifyParty", v)}
-                  options={notifyOptions}
-                  hint="Defaults to the consignee; change it independently if needed"
+                  placeholder="Notify party name"
+                  hint="Defaults to the consignee if left blank"
                 />
 
-                <LookupField
+                <TextField
                   label="Pickup Address"
                   required={form.pickupRequired}
                   value={form.pickupAddress}
                   onChange={(v) => set("pickupAddress", v)}
-                  options={addressOptionsFor(form.shipper)}
-                  disabled={!form.shipper}
-                  placeholder={
-                    form.shipper ? "Select address" : "Select shipper first"
-                  }
+                  placeholder="Pickup address"
                   error={errors.pickupAddress}
                 />
-                <LookupField
+                <TextField
                   label="Delivery Address"
                   required={form.deliveryRequired}
                   value={form.deliveryAddress}
                   onChange={(v) => set("deliveryAddress", v)}
-                  options={addressOptionsFor(form.consignee)}
-                  disabled={!form.consignee}
-                  placeholder={
-                    form.consignee ? "Select address" : "Select consignee first"
-                  }
+                  placeholder="Delivery address"
                   error={errors.deliveryAddress}
                 />
-                <LookupField
+                <TextField
                   label="Billing Customer"
                   required
                   value={form.billingCustomer}
                   onChange={(v) => set("billingCustomer", v)}
-                  options={billingOptions}
+                  placeholder="Billing customer"
                   hint="Defaults to the booking customer"
                   error={errors.billingCustomer}
                 />
@@ -2131,6 +2462,7 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
                   onChange={(v) => set("contactPerson", v)}
                   placeholder="Name"
                   error={errors.contactPerson}
+                  disabled={isFlowBooking}
                 />
                 <TextField
                   label="Email"
@@ -2139,6 +2471,7 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
                   onChange={(v) => set("email", v)}
                   placeholder="name@company.com"
                   error={errors.email}
+                  disabled={isFlowBooking}
                 />
                 <TextField
                   label="Phone"
@@ -2147,6 +2480,7 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
                   onChange={(v) => set("phone", v)}
                   placeholder="+65 9876 5432"
                   error={errors.phone}
+                  disabled={isFlowBooking}
                 />
               </div>
             </Section>
@@ -2428,8 +2762,8 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
                                             toggleHandling(l.id, h)
                                           }
                                           className={`rounded-full border px-2.5 py-0.5 text-[10px] font-semibold transition ${on
-                                            ? "border-blue-500 bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-300"
-                                            : "border-slate-300 bg-white text-slate-600 hover:border-slate-400 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300"
+                                              ? "border-blue-500 bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-300"
+                                              : "border-slate-300 bg-white text-slate-600 hover:border-slate-400 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300"
                                             }`}
                                         >
                                           {h}
@@ -2635,23 +2969,10 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
                   options={FREIGHT_TERMS}
                   error={errors["commercial.freightTerms"]}
                 />
-                <SelectField
-                  label="Quotation Reference"
-                  value={form.commercial.quotationRef}
-                  onChange={changeQuotation}
-                  options={quotationOptions}
-                  disabled={!form.customer}
-                  placeholder={
-                    !form.customer
-                      ? "Select customer first"
-                      : quotationOptions.length
-                        ? "Select quotation"
-                        : "No quotations"
-                  }
-                />
                 <AmountField
                   label="Sell Rate"
                   currency={form.commercial.sellCurrency}
+                  currencyOptions={currencyOptions}
                   amount={form.commercial.sellRate}
                   onCurrency={(v) => setGroup("commercial", "sellCurrency", v)}
                   onAmount={(v) => setGroup("commercial", "sellRate", v)}
@@ -2660,6 +2981,7 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
                 <AmountField
                   label="Buy Rate (carrier cost estimate)"
                   currency={form.commercial.buyCurrency}
+                  currencyOptions={currencyOptions}
                   amount={form.commercial.buyRate}
                   onCurrency={(v) => setGroup("commercial", "buyCurrency", v)}
                   onAmount={(v) => setGroup("commercial", "buyRate", v)}
@@ -2679,7 +3001,7 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
                   }
                   value={form.commercial.currency}
                   onChange={(v) => setGroup("commercial", "currency", v)}
-                  options={CURRENCIES}
+                  options={currencyOptions}
                   error={errors["commercial.currency"]}
                 />
 
@@ -2698,7 +3020,7 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
                       </span>
                     ) : (
                       <span className="text-[11px] text-slate-400">
-                        Select a customer
+                        No matching customer record
                       </span>
                     )}
                   </div>
@@ -2752,8 +3074,8 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
                       addFiles(e.dataTransfer.files);
                     }}
                     className={`mt-2 flex flex-col items-center justify-center rounded-lg border-2 border-dashed px-3 py-5 text-center transition ${dragOver
-                      ? "border-blue-500 bg-blue-50 dark:bg-blue-500/10"
-                      : "border-slate-300 bg-slate-50/60 dark:border-gray-700 dark:bg-gray-900/40"
+                        ? "border-blue-500 bg-blue-50 dark:bg-blue-500/10"
+                        : "border-slate-300 bg-slate-50/60 dark:border-gray-700 dark:bg-gray-900/40"
                       }`}
                   >
                     <Upload
@@ -2950,10 +3272,10 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
                     >
                       <span
                         className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${current
-                          ? "bg-blue-600 text-white"
-                          : done
-                            ? "bg-emerald-500 text-white"
-                            : "bg-slate-100 text-slate-400 dark:bg-gray-800"
+                            ? "bg-blue-600 text-white"
+                            : done
+                              ? "bg-emerald-500 text-white"
+                              : "bg-slate-100 text-slate-400 dark:bg-gray-800"
                           }`}
                       >
                         {done ? <Check size={11} /> : i + 1}
@@ -2961,8 +3283,8 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
                       <span className="min-w-0">
                         <span
                           className={`block text-[11px] font-semibold ${current
-                            ? "text-blue-700 dark:text-blue-300"
-                            : "text-slate-700 dark:text-gray-200"
+                              ? "text-blue-700 dark:text-blue-300"
+                              : "text-slate-700 dark:text-gray-200"
                             }`}
                         >
                           {s.label}
@@ -3093,8 +3415,8 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
                           m.onClick();
                         }}
                         className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-[12px] hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:hover:bg-gray-800 ${m.danger
-                          ? "text-red-600 dark:text-red-400"
-                          : "text-slate-700 dark:text-gray-200"
+                            ? "text-red-600 dark:text-red-400"
+                            : "text-slate-700 dark:text-gray-200"
                           }`}
                       >
                         {m.icon && <m.icon size={13} />}

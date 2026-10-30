@@ -23,6 +23,7 @@ import ProductMaster from "../components/masters/product/ProductMaster";
 import PortMaster from "../components/masters/PortMaster/PortMaster";
 import ModeMaster from "../components/masters/ModeMaster/ModeMaster";
 import Customer from "../components/masters/Customer/Customer";
+import ListMaster from "../components/masters/listofvalues/ListMaster";
 
 const masterRoutes = [
   {
@@ -112,6 +113,10 @@ const masterRoutes = [
   {
     path: "customer",
     element: <Customer />,
+  },
+  {
+    path: "listofvalues",
+    element: <ListMaster />,
   },
 ];
 

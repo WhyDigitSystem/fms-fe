@@ -1,7 +1,6 @@
 import apiClient from "../apiClient";
 
 export const EnquiryAPI = {
-
     getEnquiryByOrgId: async (branchId, orgId) => {
         try {
             const res = await apiClient.get("/api/sales/getEnquiryByOrgId", {
@@ -42,10 +41,27 @@ export const EnquiryAPI = {
 
     createUpdateEnquiry: async (payload) => {
         try {
-            const res = await apiClient.put("/api/sales/createUpdateEnquiry", payload);
+            const res = await apiClient.put(
+                "/api/sales/createUpdateEnquiry",
+                payload,
+            );
             return res?.data ?? res;
         } catch (error) {
             console.error("❌ Error saving enquiry:", error);
+            throw error;
+        }
+    },
+
+    getPortByOrgIdAndBranch: async (orgId, branch) => {
+        try {
+            const res = await apiClient.get(
+                "/api/basicmaster/getPortByOrgIdAndBranch",
+                { params: { orgId, branch } },
+            );
+            const body = res?.data ?? res;
+            return body?.paramObjectsMap?.portResponseVO ?? [];
+        } catch (error) {
+            console.error("❌ Error fetching ports:", error);
             throw error;
         }
     },

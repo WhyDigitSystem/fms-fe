@@ -82,7 +82,7 @@ export const bestTotal = (form) => {
   return Math.min(...airlines.map((a) => a.quotationTotal));
 };
 
-export const formatMoney = (v, currency = "EUR") => {
+export const formatMoney = (v, currency = "INR") => {
   try {
     return new Intl.NumberFormat("en-IN", {
       style: "currency",

@@ -11,6 +11,7 @@ import {
   Plus,
   Search,
   Send,
+  RefreshCw,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { bestTotal, formatMoney } from "./quotationUtils";
@@ -49,6 +50,94 @@ const headings = [
   { label: "Action", className: "text-center" },
 ];
 
+// -------------------------------------------------------------
+// Helpers — flatten anything (string | number | object) → string
+// -------------------------------------------------------------
+const cityLabel = (value) => {
+  if (value == null || value === "") return "";
+  if (typeof value === "string" || typeof value === "number")
+    return String(value);
+  if (typeof value === "object") {
+    if (value.city) return String(value.city);
+    if (value.name) return String(value.name);
+    return "";
+  }
+  return "";
+};
+
+const portLabel = (value) => {
+  if (value == null || value === "") return "";
+  if (typeof value === "string" || typeof value === "number")
+    return String(value);
+  if (typeof value === "object") {
+    if (value.portCode) return String(value.portCode);
+    if (value.portName) return String(value.portName);
+    return "";
+  }
+  return "";
+};
+
+const customerLabel = (value) => {
+  if (value == null || value === "") return "";
+  if (typeof value === "string" || typeof value === "number")
+    return String(value);
+  if (typeof value === "object") {
+    if (value.customerName) return String(value.customerName);
+    if (value.name) return String(value.name);
+    return "";
+  }
+  return "";
+};
+
+// Normalise a quotation record into a safe, render-ready row
+const toRow = (item) => {
+  const ci = item.customerInformation?.[0] || {};
+  const ct = item.commercialTerms?.[0] || {};
+
+  const originPort =
+    portLabel(item.originPort) ||
+    portLabel(item.originTerminal) ||
+    portLabel(item.originAirport) ||
+    item.originCode ||
+    "";
+
+  const destinationPort =
+    portLabel(item.destinationPort) ||
+    portLabel(item.destinationTerminal) ||
+    portLabel(item.destinationAirport) ||
+    item.destinationCode ||
+    "";
+
+  return {
+    ...item,
+
+    // IDs / dates
+    id: item.id,
+    quotationNo: item.quotationNo || item.docId || "",
+    quotationDate: item.quotationDate || item.docDate || "",
+    expirationDate: item.expirationDate || "",
+
+    // Customer
+    customerName: customerLabel(ci.customerName) || "-",
+    company: item.company || item.companyName || "-",
+
+    // Route
+    originCode: originPort || "-",
+    destinationCode: destinationPort || "-",
+    originCity: cityLabel(item.originCity) || "-",
+    destinationCity: cityLabel(item.destinationCity) || "-",
+
+    // Meta
+    service: item.service || item.serviceType || "-",
+    incoterm: item.incoterm || "-",
+    status: item.status || "Draft",
+
+    // Preserved for PDF / edit
+    _raw: item,
+    _ct: ct,
+  };
+};
+
 const SelectBox = ({ value, onChange, options, label, className = "" }) => (
   <div className={`relative ${className}`}>
     <select
@@ -63,7 +152,6 @@ const SelectBox = ({ value, onChange, options, label, className = "" }) => (
         </option>
       ))}
     </select>
-
     <ChevronDown
       size={13}
       className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400"
@@ -83,33 +171,24 @@ const QuotationList = ({
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
-  // Back Navigation
-  const handleBack = () => {
-    if (onBack) {
-      onBack();
-    } else {
-      window.history.back();
-    }
-  };
+  // ✅ Normalise once per data change
+  const rows = useMemo(() => quotations.map(toRow), [quotations]);
 
-  // Search and filter quotations
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
 
-    return quotations.filter((item) => {
-      const customerName = item.customerInformation?.[0]?.customerName || "";
-
+    return rows.filter((item) => {
       const matchesSearch = [
-        item.quotationNo || item.docId,
-        item.quotationDate || item.docDate,
+        item.quotationNo,
+        item.quotationDate,
         item.expirationDate,
-        customerName,
-        item.company || item.companyName,
+        item.customerName,
+        item.company,
         item.originCode,
         item.originCity,
         item.destinationCode,
         item.destinationCity,
-        item.service || item.serviceType,
+        item.service,
         item.incoterm,
         item.status,
       ].some((value) =>
@@ -123,13 +202,10 @@ const QuotationList = ({
         (statusFilter === "All" || item.status === statusFilter)
       );
     });
-  }, [quotations, search, statusFilter]);
+  }, [rows, search, statusFilter]);
 
-  // Pagination
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
-
   const startIndex = (currentPage - 1) * pageSize;
-
   const currentItems = filtered.slice(startIndex, startIndex + pageSize);
 
   useEffect(() => {
@@ -137,29 +213,26 @@ const QuotationList = ({
   }, [search, statusFilter, pageSize]);
 
   useEffect(() => {
-    if (currentPage > totalPages) {
-      setCurrentPage(totalPages);
-    }
+    if (currentPage > totalPages) setCurrentPage(totalPages);
   }, [currentPage, totalPages]);
 
-  // Statistics
   const stats = [
     {
       label: "Total Quotations",
-      value: quotations.length,
+      value: rows.length,
       icon: FileText,
       color: "text-blue-600 bg-blue-50 dark:bg-blue-500/10 dark:text-blue-400",
     },
     {
       label: "Sent",
-      value: quotations.filter((i) => i.status === "Sent").length,
+      value: rows.filter((i) => i.status === "Sent").length,
       icon: Send,
       color:
         "text-amber-600 bg-amber-50 dark:bg-amber-500/10 dark:text-amber-400",
     },
     {
       label: "Accepted",
-      value: quotations.filter((i) => i.status === "Accepted").length,
+      value: rows.filter((i) => i.status === "Accepted").length,
       icon: CheckCircle2,
       color:
         "text-emerald-600 bg-emerald-50 dark:bg-emerald-500/10 dark:text-emerald-400",
@@ -169,30 +242,25 @@ const QuotationList = ({
   return (
     <div className="min-h-screen w-full bg-slate-50 dark:bg-gray-900">
       <div className="w-full space-y-2 p-3 sm:p-4 lg:px-5 lg:py-3">
-        {/* Header */}
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={handleBack}
+              onClick={onBack}
               aria-label="Go back"
-              title="Back"
               className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-600 transition hover:bg-slate-100 dark:border-gray-700 dark:bg-gray-800/40 dark:text-gray-300 dark:hover:bg-gray-800"
             >
               <ArrowLeft size={15} />
             </button>
-
             <div>
               <div className="flex flex-wrap items-center gap-2">
                 <h1 className="text-base font-bold leading-tight text-slate-900 dark:text-white sm:text-lg">
                   Quotation Management
                 </h1>
-
                 <span className="rounded-md bg-blue-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-blue-700 dark:bg-blue-500/10 dark:text-blue-300">
                   Sales
                 </span>
               </div>
-
               <p className="mt-0.5 text-[10px] text-slate-500 dark:text-gray-400">
                 Prepare airfreight quotations with origin charges, airline rates
                 and commercial terms.
@@ -210,7 +278,6 @@ const QuotationList = ({
           </button>
         </div>
 
-        {/* Statistics */}
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
           {stats.map(({ label, value, icon: Icon, color }) => (
             <div
@@ -221,12 +288,10 @@ const QuotationList = ({
                 <p className="text-[11px] font-medium text-slate-500 dark:text-gray-400">
                   {label}
                 </p>
-
                 <p className="mt-1 text-lg font-bold leading-none text-slate-900 dark:text-white">
                   {value}
                 </p>
               </div>
-
               <div
                 className={`flex h-8 w-8 items-center justify-center rounded-md ${color}`}
               >
@@ -236,27 +301,22 @@ const QuotationList = ({
           ))}
         </div>
 
-        {/* Quotation Register */}
         <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm dark:border-gray-700/60 dark:bg-gray-800/40">
-          {/* Search and Filters */}
           <div className="flex flex-col gap-2 border-b border-slate-100 px-3 py-2 dark:border-gray-700/60 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <h2 className="text-xs font-semibold text-slate-900 dark:text-white">
                 Quotation Register
               </h2>
-
               <p className="mt-0.5 text-[10px] text-slate-500 dark:text-gray-400">
                 View and manage all customer quotations.
               </p>
             </div>
-
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <div className="relative min-w-0 sm:w-64">
                 <Search
                   size={14}
                   className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400"
                 />
-
                 <input
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
@@ -265,7 +325,6 @@ const QuotationList = ({
                   className={`${controlClass} w-full pl-8`}
                 />
               </div>
-
               <SelectBox
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
@@ -281,7 +340,6 @@ const QuotationList = ({
             </div>
           </div>
 
-          {/* Table */}
           <div className="overflow-x-auto">
             <table className="w-full min-w-[1100px] text-left text-[11px]">
               <thead>
@@ -310,106 +368,75 @@ const QuotationList = ({
                 ) : (
                   currentItems.map((item) => {
                     const status = item.status || "Draft";
-
-                    const customerName =
-                      item.customerInformation?.[0]?.customerName || "-";
-
                     return (
                       <tr
-                        key={item.id ?? item.quotationNo ?? item.docId}
+                        key={item.id ?? item.quotationNo}
                         className="transition hover:bg-slate-50/80 dark:hover:bg-gray-800/60"
                       >
-                        {/* Quotation Number */}
                         <td className="whitespace-nowrap px-3 py-2 align-middle">
                           <span className="font-semibold text-blue-700 dark:text-blue-400">
-                            {item.quotationNo || item.docId || "-"}
+                            {item.quotationNo || "-"}
                           </span>
                         </td>
-
-                        {/* Date */}
                         <td className="whitespace-nowrap px-3 py-2 align-middle text-slate-600 dark:text-gray-300">
-                          {item.quotationDate || item.docDate || "-"}
+                          {item.quotationDate || "-"}
                         </td>
-
-                        {/* Valid Until */}
                         <td className="whitespace-nowrap px-3 py-2 align-middle text-slate-600 dark:text-gray-300">
                           {item.expirationDate || "-"}
                         </td>
-
-                        {/* Customer */}
                         <td className="max-w-[200px] px-3 py-2 align-middle">
                           <p
                             className="truncate font-semibold text-slate-800 dark:text-gray-100"
-                            title={customerName}
+                            title={item.customerName}
                           >
-                            {customerName}
+                            {item.customerName}
                           </p>
-
                           <p className="mt-0.5 truncate text-[10px] text-slate-500 dark:text-gray-400">
-                            {item.company || item.companyName || "-"}
+                            {item.company || "-"}
                           </p>
                         </td>
-
-                        {/* Route */}
                         <td className="max-w-[220px] px-3 py-2 align-middle">
                           <p className="flex items-center gap-1 font-medium text-slate-700 dark:text-gray-100">
                             <MapPin
                               size={11}
                               className="shrink-0 text-slate-400"
                             />
-
                             <span className="truncate">
-                              {item.originCode || "-"} →{" "}
-                              {item.destinationCode || "-"}
+                              {item.originCode} → {item.destinationCode}
                             </span>
                           </p>
-
                           <p className="mt-0.5 truncate text-[10px] text-slate-500 dark:text-gray-400">
-                            {item.originCity || "-"} to{" "}
-                            {item.destinationCity || "-"}
+                            {item.originCity} to {item.destinationCity}
                           </p>
                         </td>
-
-                        {/* Service */}
                         <td className="whitespace-nowrap px-3 py-2 align-middle text-slate-600 dark:text-gray-300">
-                          {item.service || item.serviceType || "-"}
+                          {item.service || "-"}
                         </td>
-
-                        {/* Incoterm */}
                         <td className="whitespace-nowrap px-3 py-2 align-middle">
                           <span className="rounded-md border border-slate-200 px-1.5 py-1 font-medium text-slate-600 dark:border-gray-700 dark:bg-gray-900/50 dark:text-gray-300">
                             {item.incoterm || "-"}
                           </span>
                         </td>
-
-                        {/* Best Total */}
                         <td className="whitespace-nowrap px-3 py-2 text-right align-middle font-semibold text-slate-800 dark:text-gray-100">
-                          {formatMoney(bestTotal(item))}
+                          {formatMoney(bestTotal(item._raw))}
                         </td>
-
-                        {/* Status */}
                         <td className="whitespace-nowrap px-3 py-2 align-middle">
                           <span
-                            className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ring-inset ${
-                              statusStyles[status] || statusStyles.Draft
-                            }`}
+                            className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ring-inset ${statusStyles[status] || statusStyles.Draft
+                              }`}
                           >
                             <span
-                              className={`h-1.5 w-1.5 rounded-full ${
-                                statusDots[status] || statusDots.Draft
-                              }`}
+                              className={`h-1.5 w-1.5 rounded-full ${statusDots[status] || statusDots.Draft
+                                }`}
                             />
-
                             {status}
                           </span>
                         </td>
-
-                        {/* Actions */}
                         <td className="px-3 py-2 align-middle">
                           <div className="flex justify-center gap-1.5">
                             <button
                               type="button"
-                              onClick={() => downloadQuotationPdf(item)}
+                              onClick={() => downloadQuotationPdf(item._raw)}
                               className="flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 text-slate-500 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 dark:border-gray-700 dark:text-gray-300 dark:hover:border-blue-500/40 dark:hover:bg-blue-500/10 dark:hover:text-blue-300"
                               title="Download PDF"
                             >
@@ -418,11 +445,21 @@ const QuotationList = ({
 
                             <button
                               type="button"
-                              onClick={() => onEdit?.(item)}
+                              onClick={() => onEdit?.(item._raw)}
                               className="flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 text-slate-500 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 dark:border-gray-700 dark:text-gray-300 dark:hover:border-blue-500/40 dark:hover:bg-blue-500/10 dark:hover:text-blue-300"
                               title="Edit quotation"
                             >
                               <Pencil size={13} />
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => onEdit?.(item._raw)}
+                              className="flex h-7 items-center justify-center gap-1 rounded-md border border-slate-200 px-2 text-slate-500 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 dark:border-gray-700 dark:text-gray-300 dark:hover:border-blue-500/40 dark:hover:bg-blue-500/10 dark:hover:text-blue-300"
+                              title="Revise quotation"
+                            >
+                              <RefreshCw size={13} />
+                              <span className="text-[10px] font-semibold">Revise</span>
                             </button>
                           </div>
                         </td>
@@ -431,7 +468,6 @@ const QuotationList = ({
                   })
                 )}
 
-                {/* Empty State */}
                 {!loading && currentItems.length === 0 && (
                   <tr>
                     <td colSpan={headings.length} className="px-3 py-10">
@@ -439,11 +475,9 @@ const QuotationList = ({
                         <span className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-400 dark:bg-gray-900 dark:text-gray-500">
                           <Search size={18} />
                         </span>
-
                         <p className="mt-2 text-xs font-medium text-slate-700 dark:text-gray-200">
                           No quotations found
                         </p>
-
                         <p className="mt-1 text-[10px] text-slate-500 dark:text-gray-400">
                           Try changing your search or filters.
                         </p>
@@ -455,7 +489,6 @@ const QuotationList = ({
             </table>
           </div>
 
-          {/* Pagination */}
           <div className="flex flex-col gap-2 border-t border-slate-100 px-3 py-2 dark:border-gray-700/60 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500 dark:text-gray-400">
               <span>
@@ -463,7 +496,6 @@ const QuotationList = ({
                 {Math.min(startIndex + pageSize, filtered.length)} of{" "}
                 {filtered.length}
               </span>
-
               <SelectBox
                 value={String(pageSize)}
                 onChange={(e) => setPageSize(Number(e.target.value))}
@@ -485,11 +517,9 @@ const QuotationList = ({
               >
                 <ChevronLeft size={14} />
               </button>
-
               <span className="min-w-24 text-center text-[11px] text-slate-600 dark:text-gray-300">
                 Page {currentPage} of {totalPages}
               </span>
-
               <button
                 type="button"
                 onClick={() =>

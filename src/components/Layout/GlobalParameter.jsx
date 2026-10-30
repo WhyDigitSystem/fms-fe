@@ -290,6 +290,13 @@ const GlobalSelectionDropdown = () => {
         userid: String(user?.userData?.usersId ?? ""),
       };
 
+      const payloadSave = {
+        branch: selectedBranch?.branch ?? 0,      // ✅ numeric branchId
+        financialYear: selectedFY?.finYear ?? 0,         // ✅ numeric FY id
+        orgId: Number(user?.userData?.orgId) || 0,
+        userid: String(user?.userData?.usersId ?? ""),
+      };
+
       console.log("Saving Payload:", payload);
 
       const response = await GlobalParameterAPI.saveGlobalParameters(payload);
@@ -307,6 +314,7 @@ const GlobalSelectionDropdown = () => {
         localStorage.setItem("financialYearId", String(selectedFY?.id ?? ""));
 
         localStorage.setItem("globalParams", JSON.stringify(payload));
+        localStorage.setItem("globalParam", JSON.stringify(payloadSave));
 
         setCurrentGlobalParams(payload);
         setSuccess(true);

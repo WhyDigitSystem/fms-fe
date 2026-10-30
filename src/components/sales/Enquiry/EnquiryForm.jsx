@@ -1,32 +1,103 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
   ArrowRight,
   Box,
+  Calendar as CalendarIcon,
   Check,
+  ChevronDown,
   ClipboardList,
   MapPin,
   Plane,
   Save,
   Ship,
   Truck,
+  X,
 } from "lucide-react";
 import EnquiryAPI from "../../../api/sales/enquiryAPI";
+import listOfValuesAPI from "../../../api/listOfValuesAPI";
 
-const today = () => {
+// -------------------------------------------------------------
+// Date Helpers
+// -------------------------------------------------------------
+const pad2 = (n) => String(n).padStart(2, "0");
+
+const todayIso = () => {
   const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
-    d.getDate(),
-  ).padStart(2, "0")}`;
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 };
 
+const isoToDisplay = (value) => {
+  if (value == null || value === "") return "";
+  const s = String(value).trim();
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return `${m[3]}-${m[2]}-${m[1]}`;
+  if (/^\d{2}-\d{2}-\d{4}$/.test(s)) return s;
+  const d = new Date(s);
+  if (!Number.isNaN(d.getTime())) {
+    return `${pad2(d.getDate())}-${pad2(d.getMonth() + 1)}-${d.getFullYear()}`;
+  }
+  return s;
+};
+
+const displayToIso = (value) => {
+  if (value == null || value === "") return "";
+  const s = String(value).trim();
+  const m = s.match(/^(\d{2})-(\d{2})-(\d{4})$/);
+  if (m) {
+    const [, dd, mm, yyyy] = m;
+    const d = Number(dd);
+    const mo = Number(mm);
+    const y = Number(yyyy);
+    if (d >= 1 && d <= 31 && mo >= 1 && mo <= 12 && y >= 1900 && y <= 3000) {
+      return `${yyyy}-${mm}-${dd}`;
+    }
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  return "";
+};
+
+const formatTyping = (val) => {
+  const digits = val.replace(/\D/g, "").slice(0, 8);
+  if (digits.length <= 2) return digits;
+  if (digits.length <= 4) return `${digits.slice(0, 2)}-${digits.slice(2)}`;
+  return `${digits.slice(0, 2)}-${digits.slice(2, 4)}-${digits.slice(4)}`;
+};
+
+const todayDisplay = () => isoToDisplay(todayIso());
+
+// -------------------------------------------------------------
+// Other Helpers
+// -------------------------------------------------------------
 const titleCase = (v) =>
   String(v || "")
     .toLowerCase()
     .replace(/(^|\s)\S/g, (s) => s.toUpperCase());
 
+const locationValue = (value) => {
+  if (value == null || value === "") return "";
+  if (typeof value === "string" || typeof value === "number")
+    return String(value);
+  if (typeof value === "object") {
+    if (value.city) return String(value.city);
+    if (value.portName) return String(value.portName);
+    return "";
+  }
+  return "";
+};
+
+const idValue = (value) => {
+  if (value == null || value === "") return "";
+  if (typeof value === "string" || typeof value === "number")
+    return String(value);
+  if (typeof value === "object" && value.id != null) return String(value.id);
+  return "";
+};
+
 const emptyCargo = {
   cargoType: "LCL",
+  cargoTypeId: "",
+  cargoGroupId: "",
   containerSize: "20 FT",
   containers: "",
   cbm: "",
@@ -41,8 +112,8 @@ const emptyCargo = {
 const initialForm = {
   id: 0,
   enquiryNo: "",
-  enquiryDate: today(),
-  customer: "",
+  enquiryDate: todayDisplay(), // ✅ store display format
+  company: "",
   movement: "Export",
   mode: "Sea",
   origin: "",
@@ -52,37 +123,6 @@ const initialForm = {
   pod: "",
   status: "Open",
   cargoDetails: { ...emptyCargo },
-};
-
-const places = ["Bengaluru", "Mumbai", "Chennai", "Hamburg", "Frankfurt"];
-
-const locations = {
-  Sea: {
-    Bengaluru: [
-      "Bengaluru ICD",
-      "Chennai Port",
-      "Jawaharlal Nehru Port (JNPT)",
-      "Cochin Port",
-    ],
-    Hamburg: ["Port of Hamburg", "Port of Bremerhaven"],
-    Mumbai: ["Jawaharlal Nehru Port (JNPT)", "Mumbai Port"],
-    Chennai: ["Chennai Port"],
-    Frankfurt: ["Port of Hamburg", "Port of Bremerhaven"],
-  },
-  Air: {
-    Bengaluru: ["Kempegowda International Airport (BLR)"],
-    Hamburg: ["Hamburg Airport (HAM)"],
-    Frankfurt: ["Frankfurt Airport (FRA)"],
-    Mumbai: ["Chhatrapati Shivaji Maharaj International Airport (BOM)"],
-    Chennai: ["Chennai International Airport (MAA)"],
-  },
-  Road: {
-    Bengaluru: ["Bengaluru Road Terminal", "Bengaluru ICD"],
-    Hamburg: ["Hamburg Freight Terminal"],
-    Frankfurt: ["Frankfurt Freight Terminal"],
-    Mumbai: ["Mumbai Road Freight Terminal"],
-    Chennai: ["Chennai Freight Terminal"],
-  },
 };
 
 const modes = [
@@ -154,13 +194,68 @@ const TextField = ({
       aria-invalid={!!error}
       aria-required={required || undefined}
       onChange={(e) => onChange?.(e.target.value)}
-      className={`${inputClass} ${
-        error ? "!border-rose-500 focus:!ring-rose-500/10" : ""
-      }`}
+      className={`${inputClass} ${error ? "!border-rose-500 focus:!ring-rose-500/10" : ""
+        }`}
       {...rest}
     />
   </Field>
 );
+
+/* ✅ Custom DatePickerField that visually shows dd-mm-yyyy */
+const DatePickerField = ({
+  label,
+  required,
+  error,
+  onChange,
+  value, // display format dd-mm-yyyy
+  className = "",
+}) => {
+  const hiddenDateRef = useRef(null);
+
+  const handleTextChange = (e) => {
+    const formatted = formatTyping(e.target.value);
+    onChange?.(formatted);
+  };
+
+  const handleNativeDate = (e) => {
+    const iso = e.target.value;
+    if (iso) onChange?.(isoToDisplay(iso));
+  };
+
+  return (
+    <Field label={label} required={required} error={error} className={className}>
+      <div className="relative">
+        <input
+          type="text"
+          placeholder="dd-mm-yyyy"
+          value={value ?? ""}
+          onChange={handleTextChange}
+          aria-invalid={!!error}
+          aria-required={required || undefined}
+          className={`${inputClass} pr-8 ${error ? "!border-rose-500 focus:!ring-rose-500/10" : ""
+            }`}
+        />
+        <button
+          type="button"
+          onClick={() => hiddenDateRef.current?.showPicker()}
+          className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-gray-200"
+          aria-label="Open date picker"
+        >
+          <CalendarIcon size={13} />
+        </button>
+        {/* Hidden native date input for the calendar widget */}
+        <input
+          type="date"
+          ref={hiddenDateRef}
+          className="absolute bottom-0 right-0 h-0 w-0 opacity-0 pointer-events-none"
+          tabIndex={-1}
+          value={displayToIso(value) || ""}
+          onChange={handleNativeDate}
+        />
+      </div>
+    </Field>
+  );
+};
 
 const SelectField = ({
   label,
@@ -180,9 +275,8 @@ const SelectField = ({
       aria-invalid={!!error}
       aria-required={required || undefined}
       onChange={(e) => onChange(e.target.value)}
-      className={`${inputClass} ${
-        error ? "!border-rose-500 focus:!ring-rose-500/10" : ""
-      }`}
+      className={`${inputClass} ${error ? "!border-rose-500 focus:!ring-rose-500/10" : ""
+        }`}
     >
       <option value="">{placeholder}</option>
       {options.map((option) => {
@@ -200,23 +294,171 @@ const SelectField = ({
   </Field>
 );
 
+/* ✅ Searchable combobox for city pickers */
+const SearchableSelectField = ({
+  label,
+  required,
+  error,
+  value,
+  onChange,
+  options = [],
+  placeholder = "Search...",
+  disabled,
+  className = "",
+}) => {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const [rect, setRect] = useState(null);
+  const containerRef = useRef(null);
+  const inputRef = useRef(null);
+
+  const filtered = useMemo(() => {
+    const t = q.trim().toLowerCase();
+    const list = t
+      ? options.filter((opt) => String(opt).toLowerCase().includes(t))
+      : options;
+    return list.slice(0, 100);
+  }, [options, q]);
+
+  const updateRect = () => {
+    if (inputRef.current) {
+      setRect(inputRef.current.getBoundingClientRect());
+    }
+  };
+
+  useEffect(() => {
+    const onDown = (e) => {
+      if (containerRef.current && !containerRef.current.contains(e.target)) {
+        setOpen(false);
+      }
+    };
+    const onScroll = () => {
+      if (open) updateRect();
+    };
+    document.addEventListener("mousedown", onDown);
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", onScroll);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", onScroll);
+    };
+  }, [open]);
+
+  const handleFocus = () => {
+    updateRect();
+    setQ("");
+    setOpen(true);
+  };
+
+  return (
+    <Field label={label} required={required} error={error} className={className}>
+      <div className="relative" ref={containerRef}>
+        <input
+          ref={inputRef}
+          type="text"
+          value={open ? q : value ?? ""}
+          placeholder={placeholder}
+          disabled={disabled}
+          aria-invalid={!!error}
+          aria-required={required || undefined}
+          onFocus={handleFocus}
+          onChange={(e) => {
+            setQ(e.target.value);
+            setOpen(true);
+            updateRect();
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              setOpen(false);
+              e.currentTarget.blur();
+            }
+            if (e.key === "Enter" && open && filtered.length === 1) {
+              e.preventDefault();
+              onChange?.(filtered[0]);
+              setOpen(false);
+              e.currentTarget.blur();
+            }
+          }}
+          className={`${inputClass} pr-14 ${error ? "!border-rose-500 focus:!ring-rose-500/10" : ""
+            }`}
+        />
+        {value && !disabled && (
+          <button
+            type="button"
+            aria-label="Clear selection"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => {
+              onChange?.("");
+              setOpen(false);
+            }}
+            className="absolute right-7 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-gray-200"
+          >
+            <X size={12} />
+          </button>
+        )}
+        <ChevronDown
+          size={12}
+          className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400"
+        />
+
+        {open && rect && (
+          <ul
+            style={{
+              position: "fixed",
+              top: rect.bottom + 4,
+              left: rect.left,
+              width: rect.width,
+              zIndex: 9999,
+            }}
+            className="max-h-52 overflow-auto rounded-md border border-slate-200 bg-white py-1 text-[11px] shadow-lg dark:border-gray-700 dark:bg-gray-900"
+          >
+            {filtered.length === 0 ? (
+              <li className="px-2.5 py-2 text-slate-500 dark:text-gray-400">
+                No matches
+              </li>
+            ) : (
+              filtered.map((opt) => (
+                <li key={opt}>
+                  <button
+                    type="button"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => {
+                      onChange?.(opt);
+                      setOpen(false);
+                    }}
+                    className={`flex w-full items-center justify-between gap-2 px-2.5 py-1.5 text-left hover:bg-blue-50 dark:hover:bg-blue-500/10 ${opt === value
+                        ? "bg-blue-50/60 font-semibold text-blue-700 dark:bg-blue-500/10 dark:text-blue-300"
+                        : "text-slate-700 dark:text-gray-200"
+                      }`}
+                  >
+                    <span className="truncate">{opt}</span>
+                  </button>
+                </li>
+              ))
+            )}
+          </ul>
+        )}
+      </div>
+    </Field>
+  );
+};
+
 const ModeCard = ({ value, hint, icon: Icon, selected, onClick }) => (
   <button
     type="button"
     onClick={() => onClick(value)}
     aria-pressed={selected}
-    className={`flex w-full items-center gap-2 rounded-lg border p-2 text-left transition ${
-      selected
+    className={`flex w-full items-center gap-2 rounded-lg border p-2 text-left transition ${selected
         ? "border-blue-600 bg-blue-50 ring-2 ring-blue-600/10 dark:bg-blue-500/10"
         : "border-slate-200 bg-white hover:border-slate-300 dark:border-gray-700 dark:bg-gray-900"
-    }`}
+      }`}
   >
     <span
-      className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md ${
-        selected
+      className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md ${selected
           ? "bg-blue-600 text-white"
           : "bg-slate-100 text-slate-500 dark:bg-gray-800 dark:text-gray-300"
-      }`}
+        }`}
     >
       <Icon size={18} />
     </span>
@@ -234,32 +476,19 @@ const ModeCard = ({ value, hint, icon: Icon, selected, onClick }) => (
   </button>
 );
 
-const StepHeader = ({ step, title, subtitle }) => (
-  <div className="mb-1.5">
-    <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-blue-600">
-      Step {step} of 3
-    </p>
-    <h2 className="text-sm font-bold tracking-tight text-slate-900 dark:text-white">
-      {title}
-    </h2>
-    {subtitle && (
-      <p className="text-[10px] leading-3.5 text-slate-500 dark:text-gray-400">
-        {subtitle}
-      </p>
-    )}
-  </div>
-);
-
 /* ------------------------------------------------------------------ */
 /* Screen                                                              */
 /* ------------------------------------------------------------------ */
 
-export default function EnquiryForm({ onBack = () => {}, onSave, editData }) {
+export default function EnquiryForm({ onBack = () => { }, onSave, editData }) {
   const [step, setStep] = useState(1);
   const [form, setForm] = useState(() => ({
     ...initialForm,
     ...editData,
-    enquiryDate: editData?.enquiryDate || today(),
+    // ✅ Normalize the date into dd-mm-yyyy for display
+    enquiryDate: editData?.enquiryDate
+      ? isoToDisplay(editData.enquiryDate)
+      : todayDisplay(),
     cargoDetails: {
       ...emptyCargo,
       ...(editData?.cargoDetails || {}),
@@ -269,14 +498,62 @@ export default function EnquiryForm({ onBack = () => {}, onSave, editData }) {
   const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState("");
 
-  // Enquiry docId + record loading state
   const [enquiryDocId, setEnquiryDocId] = useState("");
   const [loadingDocId, setLoadingDocId] = useState(false);
   const [recordLoading, setRecordLoading] = useState(false);
 
-  const orgId = parseInt(localStorage.getItem("orgId"));
+  // Port data
+  const [ports, setPorts] = useState([]);
+  const [portsLoading, setPortsLoading] = useState(false);
+
+  // Cargo-type / cargo-group lookups
+  const [cargoTypeValues, setCargoTypeValues] = useState([]);
+  const [cargoGroupValues, setCargoGroupValues] = useState([]);
+  const [lovLoading, setLovLoading] = useState(false);
+
+  const orgId = parseInt(localStorage.getItem("orgId"), 10);
   const branch = Number(localStorage.getItem("branchId"));
   const loginUserName = localStorage.getItem("userName") || "SYSTEM";
+
+  // --------------------------------------------------------------
+  // Fetch ports
+  // --------------------------------------------------------------
+  const fetchPorts = useCallback(async () => {
+    if (!orgId || !branch) return;
+    try {
+      setPortsLoading(true);
+      const list = await EnquiryAPI.getPortByOrgIdAndBranch(orgId, branch);
+      setPorts(Array.isArray(list) ? list : []);
+    } catch (error) {
+      console.error("Failed to load ports:", error);
+      setErrors((prev) => ({
+        ...prev,
+        submit: "Unable to load ports.",
+      }));
+    } finally {
+      setPortsLoading(false);
+    }
+  }, [orgId, branch]);
+
+  // --------------------------------------------------------------
+  // Fetch cargo type + cargo group list values
+  // --------------------------------------------------------------
+  const fetchLookups = useCallback(async () => {
+    if (!orgId) return;
+    try {
+      setLovLoading(true);
+      const [cargoTypes, cargoGroups] = await Promise.all([
+        listOfValuesAPI.getListValuesGroup("CARGO TYPE", orgId),
+        listOfValuesAPI.getListValuesGroup("CARGO GROUP", orgId),
+      ]);
+      setCargoTypeValues(Array.isArray(cargoTypes) ? cargoTypes : []);
+      setCargoGroupValues(Array.isArray(cargoGroups) ? cargoGroups : []);
+    } catch (error) {
+      console.error("Failed to load cargo lookups:", error);
+    } finally {
+      setLovLoading(false);
+    }
+  }, [orgId]);
 
   // --------------------------------------------------------------
   // Fetch auto-generated enquiry number when creating
@@ -307,45 +584,34 @@ export default function EnquiryForm({ onBack = () => {}, onSave, editData }) {
       const record = await EnquiryAPI.getEnquiryById(id);
       if (!record) return;
 
-      const apiMode = String(record.shipmentMode || "").toUpperCase();
-
       const pickOrigin =
-        apiMode === "SEA"
-          ? record.originPort
-          : apiMode === "AIR"
-            ? record.originAirport
-            : apiMode === "ROAD"
-              ? record.originTerminal
-              : record.originPort ||
-                record.originAirport ||
-                record.originTerminal;
+        record.originTerminal || record.originPort || record.originAirport;
 
       const pickDestination =
-        apiMode === "SEA"
-          ? record.destinationPort
-          : apiMode === "AIR"
-            ? record.destinationAirport
-            : apiMode === "ROAD"
-              ? record.destinationTerminal
-              : record.destinationPort ||
-                record.destinationAirport ||
-                record.destinationTerminal;
+        record.destinationTerminal ||
+        record.destinationPort ||
+        record.destinationAirport;
 
       setForm({
         id: record.id || id,
         enquiryNo: record.docId || "",
-        enquiryDate: record.docDate || today(),
-        customer: record.customer || "",
+        enquiryDate: isoToDisplay(record.docDate || todayIso()), // ✅ display format
+        company: record.company || record.customer || "",
         movement: record.movement ? titleCase(record.movement) : "Export",
         mode: record.shipmentMode ? titleCase(record.shipmentMode) : "Sea",
-        origin: record.fromLocation || "",
-        destination: record.toLocation || "",
+        origin: locationValue(record.fromLocation),
+        destination: locationValue(record.toLocation),
         cargo: record.cargoDescription || "",
-        pol: pickOrigin || "",
-        pod: pickDestination || "",
+        pol: idValue(pickOrigin),
+        pod: idValue(pickDestination),
         status: "Open",
         cargoDetails: {
-          cargoType: record.cargoType || "",
+          cargoType:
+            typeof record.cargoType === "object"
+              ? record.cargoType?.valueCode || "LCL"
+              : record.cargoType || "LCL",
+          cargoTypeId: idValue(record.cargoTypeId || record.cargoType),
+          cargoGroupId: idValue(record.cargoGroupId || record.cargoGroup),
           containerSize: "20 FT",
           containers: "",
           cbm: record.volumeCbm != null ? String(record.volumeCbm) : "",
@@ -372,8 +638,13 @@ export default function EnquiryForm({ onBack = () => {}, onSave, editData }) {
   }, []);
 
   // --------------------------------------------------------------
-  // On editData change: fetch by id, or fetch a fresh docId
+  // On mount
   // --------------------------------------------------------------
+  useEffect(() => {
+    fetchPorts();
+    fetchLookups();
+  }, [fetchPorts, fetchLookups]);
+
   useEffect(() => {
     if (editData?.id) {
       fetchEnquiryById(editData.id);
@@ -413,6 +684,8 @@ export default function EnquiryForm({ onBack = () => {}, onSave, editData }) {
       mode,
       pol: "",
       pod: "",
+      origin: "",
+      destination: "",
       cargoDetails: {
         ...emptyCargo,
         cargoType: mode === "Sea" ? "LCL" : "",
@@ -421,41 +694,135 @@ export default function EnquiryForm({ onBack = () => {}, onSave, editData }) {
     setErrors({});
   };
 
-  const getLocations = (place) => {
-    const key = place.trim();
-    const list = locations[form.mode]?.[key] || [];
-    const selectedValue =
-      key && key === form.origin.trim()
-        ? form.pol
-        : key && key === form.destination.trim()
-          ? form.pod
-          : "";
-    const options = list.length
-      ? [...list]
-      : key
-        ? [`${key} — Other location`]
-        : [];
-    if (selectedValue && !options.includes(selectedValue))
-      options.unshift(selectedValue);
-    return options;
-  };
+  // --------------------------------------------------------------
+  // Derived data
+  // --------------------------------------------------------------
+
+  const cities = useMemo(() => {
+    const seen = new Map();
+    ports.forEach((p) => {
+      const raw = p?.city?.city;
+      if (!raw) return;
+      const key = String(raw).trim().toUpperCase();
+      if (key && !seen.has(key)) seen.set(key, String(raw).trim());
+    });
+    return Array.from(seen.values()).sort((a, b) => a.localeCompare(b));
+  }, [ports]);
+
+  const originCityOptions = useMemo(() => {
+    const destinationKey = String(form.destination || "")
+      .trim()
+      .toUpperCase();
+    return cities.filter(
+      (c) =>
+        !destinationKey || String(c).trim().toUpperCase() !== destinationKey,
+    );
+  }, [cities, form.destination]);
+
+  const destinationCityOptions = useMemo(() => {
+    const originKey = String(form.origin || "").trim().toUpperCase();
+    return cities.filter(
+      (c) => !originKey || String(c).trim().toUpperCase() !== originKey,
+    );
+  }, [cities, form.origin]);
+
+  const getPortsForCity = useCallback(
+    (city) => {
+      if (!city || !ports.length) return [];
+      const modeUpper = String(form.mode || "").trim().toUpperCase();
+      const cityUpper = String(city).trim().toUpperCase();
+      return ports
+        .filter((p) => {
+          const pType = String(p?.portType || "").trim().toUpperCase();
+          const pCity = String(p?.city?.city || "").trim().toUpperCase();
+          return pType === modeUpper && pCity === cityUpper;
+        })
+        .map((p) => ({
+          value: String(p.id),
+          label: `${p.portName} (${p.portCode})`,
+        }));
+    },
+    [ports, form.mode],
+  );
+
+  const originPortOptions = useMemo(
+    () => getPortsForCity(form.origin),
+    [getPortsForCity, form.origin],
+  );
+
+  const destinationPortOptions = useMemo(
+    () => getPortsForCity(form.destination),
+    [getPortsForCity, form.destination],
+  );
+
+  // ✅ Auto-select when a city has exactly one matching port
+  useEffect(() => {
+    if (
+      originPortOptions.length === 1 &&
+      form.pol !== originPortOptions[0].value
+    ) {
+      setForm((current) => ({
+        ...current,
+        pol: originPortOptions[0].value,
+      }));
+      setErrors((current) => ({ ...current, pol: "" }));
+    }
+  }, [originPortOptions, form.pol]);
+
+  useEffect(() => {
+    if (
+      destinationPortOptions.length === 1 &&
+      form.pod !== destinationPortOptions[0].value
+    ) {
+      setForm((current) => ({
+        ...current,
+        pod: destinationPortOptions[0].value,
+      }));
+      setErrors((current) => ({ ...current, pod: "" }));
+    }
+  }, [destinationPortOptions, form.pod]);
+
+  const getAvailableTypesForCity = useCallback(
+    (city) => {
+      if (!city || !ports.length) return [];
+      const cityUpper = String(city).trim().toUpperCase();
+      const set = new Set();
+      ports.forEach((p) => {
+        const pCity = String(p?.city?.city || "").trim().toUpperCase();
+        if (pCity === cityUpper && p?.portType) {
+          set.add(String(p.portType).toUpperCase());
+        }
+      });
+      return Array.from(set);
+    },
+    [ports],
+  );
+
+  const cargoTypeOptions = useMemo(
+    () =>
+      cargoTypeValues.map((v) => ({
+        value: String(v.id),
+        label: v.valuesDescription || String(v.id),
+      })),
+    [cargoTypeValues],
+  );
+
+  const cargoGroupOptions = useMemo(
+    () =>
+      cargoGroupValues.map((v) => ({
+        value: String(v.id),
+        label: v.valuesDescription || String(v.id),
+      })),
+    [cargoGroupValues],
+  );
 
   const portLabels = {
-    Sea: ["POL / Origin Port or ICD", "POD / Destination Port"],
+    Sea: ["Origin Port", "Destination Port"],
     Air: ["Origin Airport", "Destination Airport"],
     Road: ["Origin Terminal", "Destination Terminal"],
   }[form.mode];
 
   const totalWeight = useMemo(() => Number(cargo.weight || 0), [cargo.weight]);
-
-  const totalVolume = useMemo(() => {
-    const length = Number(cargo.length || 0);
-    const width = Number(cargo.width || 0);
-    const height = Number(cargo.height || 0);
-    return length > 0 && width > 0 && height > 0
-      ? (length * width * height) / 1000000
-      : 0;
-  }, [cargo.length, cargo.width, cargo.height]);
 
   const validateStep = (currentStep) => {
     const nextErrors = {};
@@ -471,17 +838,27 @@ export default function EnquiryForm({ onBack = () => {}, onSave, editData }) {
       if (!form.destination.trim()) {
         nextErrors.destination = "Destination is required.";
       }
+      if (
+        form.origin.trim() &&
+        form.destination.trim() &&
+        form.origin.trim().toUpperCase() ===
+        form.destination.trim().toUpperCase()
+      ) {
+        nextErrors.destination = "Destination must be different from origin.";
+      }
       if (form.origin.trim() && !form.pol) {
-        nextErrors.pol = "Select an origin location.";
+        nextErrors.pol = "Select an origin port.";
       }
       if (form.destination.trim() && !form.pod) {
-        nextErrors.pod = "Select a destination location.";
+        nextErrors.pod = "Select a destination port.";
       }
     }
 
     if (currentStep === 3) {
-      if (!form.enquiryDate) nextErrors.enquiryDate = "Date is required.";
-      if (!form.customer.trim()) nextErrors.customer = "Customer is required.";
+      if (!displayToIso(form.enquiryDate)) {
+        nextErrors.enquiryDate = "Enter a valid date (dd-mm-yyyy).";
+      }
+      if (!form.company.trim()) nextErrors.company = "Company is required.";
       if (!form.cargo.trim())
         nextErrors.cargo = "Cargo description is required.";
 
@@ -556,7 +933,7 @@ export default function EnquiryForm({ onBack = () => {}, onSave, editData }) {
   };
 
   // --------------------------------------------------------------
-  // Save — map form state to the exact API payload
+  // Save
   // --------------------------------------------------------------
   const handleSave = async () => {
     if (!validateStep(3)) return;
@@ -571,40 +948,47 @@ export default function EnquiryForm({ onBack = () => {}, onSave, editData }) {
     setSubmitting(true);
 
     try {
-      const originPort = form.mode === "Sea" ? form.pol : "";
-      const destinationPort = form.mode === "Sea" ? form.pod : "";
-      const originAirport = form.mode === "Air" ? form.pol : "";
-      const destinationAirport = form.mode === "Air" ? form.pod : "";
-      const originTerminal = form.mode === "Road" ? form.pol : "";
-      const destinationTerminal = form.mode === "Road" ? form.pod : "";
-
       const toNumber = (value) => {
         const n = Number(value);
         return Number.isFinite(n) ? n : 0;
       };
 
+      const originPortRec = ports.find(
+        (p) => String(p.id) === String(form.pol),
+      );
+      const destPortRec = ports.find(
+        (p) => String(p.id) === String(form.pod),
+      );
+      const fromLocationId = toNumber(originPortRec?.city?.id || 0);
+      const toLocationId = toNumber(destPortRec?.city?.id || 0);
+
+      const originTerminal = toNumber(form.pol);
+      const destinationTerminal = toNumber(form.pod);
+
       const isUpdate = Boolean(form.id && form.id > 0);
 
+      // ✅ Convert dd-mm-yyyy → yyyy-mm-dd for the API
+      const enquiryDateIso = displayToIso(form.enquiryDate) || null;
+
       const payload = {
-        id: isUpdate ? form.id : undefined,
         orgId,
         branch: Number(branch),
         createdBy: loginUserName,
 
-        shipmentMode: form.mode,
-        movement: form.movement,
+        enquiryDate: enquiryDateIso,
+        shipmentMode: form.mode.toUpperCase(),
+        movement: form.movement.toUpperCase(),
 
-        fromLocation: form.origin.trim(),
-        toLocation: form.destination.trim(),
-        originPort,
-        destinationPort,
-        originAirport,
-        destinationAirport,
+        fromLocation: fromLocationId,
+        toLocation: toLocationId,
+
         originTerminal,
         destinationTerminal,
 
         cargoDescription: form.cargo.trim(),
-        cargoType: cargo.cargoType || "",
+        cargoType: toNumber(cargo.cargoTypeId),
+        cargoGroup: toNumber(cargo.cargoGroupId),
+
         grossWeightKg: toNumber(cargo.weight),
         volumeCbm: toNumber(cargo.cbm),
         noOfPackages: toNumber(cargo.packages),
@@ -613,18 +997,21 @@ export default function EnquiryForm({ onBack = () => {}, onSave, editData }) {
         heightCm: toNumber(cargo.height),
         vehicleType: cargo.vehicleType || "",
 
-        customer: form.customer.trim(),
+        company: form.company.trim(),
         remarks: "",
         cancelRemarks: "",
       };
 
-      if (!isUpdate) delete payload.id;
+      if (isUpdate) {
+        payload.id = form.id;
+      }
 
       const result = await EnquiryAPI.createUpdateEnquiry(payload);
 
       await onSave({
         ...form,
-        customer: form.customer.trim(),
+        enquiryDate: enquiryDateIso,
+        company: form.company.trim(),
         origin: form.origin.trim(),
         destination: form.destination.trim(),
         cargo: form.cargo.trim(),
@@ -664,7 +1051,6 @@ export default function EnquiryForm({ onBack = () => {}, onSave, editData }) {
 
   const steps = ["Mode & Movement", "Route", "Cargo details"];
 
-  // Loading gate — either docId (create) or full record (edit)
   if (loadingDocId || recordLoading) {
     return (
       <div className="flex h-[90dvh] w-full items-center justify-center bg-slate-100 dark:bg-gray-950">
@@ -747,19 +1133,16 @@ export default function EnquiryForm({ onBack = () => {}, onSave, editData }) {
                   onClick={() => goToStep(stepNo)}
                   disabled={!clickable}
                   aria-current={step === stepNo ? "step" : undefined}
-                  className={`text-left ${
-                    clickable ? "cursor-pointer" : "cursor-default"
-                  }`}
+                  className={`text-left ${clickable ? "cursor-pointer" : "cursor-default"
+                    }`}
                 >
                   <div
-                    className={`h-1 rounded-full transition ${
-                      step >= stepNo ? "bg-blue-400" : "bg-white/20"
-                    }`}
+                    className={`h-1 rounded-full transition ${step >= stepNo ? "bg-blue-400" : "bg-white/20"
+                      }`}
                   />
                   <p
-                    className={`mt-1 truncate text-[9px] ${
-                      step >= stepNo ? "text-white" : "text-slate-400"
-                    }`}
+                    className={`mt-1 truncate text-[9px] ${step >= stepNo ? "text-white" : "text-slate-400"
+                      }`}
                   >
                     {title}
                   </p>
@@ -771,7 +1154,7 @@ export default function EnquiryForm({ onBack = () => {}, onSave, editData }) {
 
         {/* Main Content */}
         <main className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-2">
-          {/* STEP 1: Combined Shipment Mode & Movement */}
+          {/* STEP 1 */}
           {step === 1 && (
             <div className="space-y-3">
               <div>
@@ -821,18 +1204,16 @@ export default function EnquiryForm({ onBack = () => {}, onSave, editData }) {
                         type="button"
                         onClick={() => setField("movement", value)}
                         aria-pressed={selected}
-                        className={`flex items-center gap-2 rounded-lg border p-2 text-left transition ${
-                          selected
+                        className={`flex items-center gap-2 rounded-lg border p-2 text-left transition ${selected
                             ? "border-blue-600 bg-blue-50 ring-2 ring-blue-600/10 dark:bg-blue-500/10"
                             : "border-slate-200 hover:border-slate-300 dark:border-gray-700"
-                        }`}
+                          }`}
                       >
                         <span
-                          className={`flex h-8 w-8 items-center justify-center rounded-md ${
-                            selected
+                          className={`flex h-8 w-8 items-center justify-center rounded-md ${selected
                               ? "bg-blue-600 text-white"
                               : "bg-slate-100 text-slate-600 dark:bg-gray-800 dark:text-gray-300"
-                          }`}
+                            }`}
                         >
                           <Icon size={18} />
                         </span>
@@ -860,7 +1241,7 @@ export default function EnquiryForm({ onBack = () => {}, onSave, editData }) {
             </div>
           )}
 
-          {/* STEP 2: Route */}
+          {/* STEP 2 */}
           {step === 2 && (
             <div>
               <Section
@@ -868,74 +1249,111 @@ export default function EnquiryForm({ onBack = () => {}, onSave, editData }) {
                 title="Shipment route"
                 subtitle={`${form.mode} freight · ${form.movement}`}
               >
-                <datalist id="enquiry-places">
-                  {places.map((place) => (
-                    <option key={place} value={place} />
-                  ))}
-                </datalist>
+                {portsLoading ? (
+                  <p className="text-[11px] text-slate-500 dark:text-gray-400">
+                    Loading locations...
+                  </p>
+                ) : (
+                  <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                    {/* ✅ Searchable From / To */}
+                    <SearchableSelectField
+                      label="From"
+                      required
+                      value={form.origin}
+                      onChange={(value) =>
+                        setField("origin", value, { pol: "" })
+                      }
+                      options={originCityOptions}
+                      placeholder={
+                        cities.length
+                          ? "Search origin city"
+                          : "No cities available"
+                      }
+                      error={errors.origin}
+                    />
+                    <SearchableSelectField
+                      label="To"
+                      required
+                      value={form.destination}
+                      onChange={(value) =>
+                        setField("destination", value, { pod: "" })
+                      }
+                      options={destinationCityOptions}
+                      placeholder={
+                        cities.length
+                          ? "Search destination city"
+                          : "No cities available"
+                      }
+                      error={errors.destination}
+                    />
+                    <SelectField
+                      label={portLabels[0]}
+                      required
+                      value={form.pol}
+                      onChange={(value) => setField("pol", value)}
+                      options={originPortOptions}
+                      error={errors.pol}
+                      disabled={!form.origin}
+                      placeholder={
+                        form.origin
+                          ? "Select port"
+                          : "Select origin city first"
+                      }
+                    />
+                    <SelectField
+                      label={portLabels[1]}
+                      required
+                      value={form.pod}
+                      onChange={(value) => setField("pod", value)}
+                      options={destinationPortOptions}
+                      error={errors.pod}
+                      disabled={!form.destination}
+                      placeholder={
+                        form.destination
+                          ? "Select port"
+                          : "Select destination city first"
+                      }
+                    />
+                  </div>
+                )}
 
-                <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
-                  <TextField
-                    label="From"
-                    required
-                    list="enquiry-places"
-                    value={form.origin}
-                    onChange={(value) => setField("origin", value, { pol: "" })}
-                    placeholder="e.g. Bengaluru"
-                    error={errors.origin}
-                  />
-                  <TextField
-                    label="To"
-                    required
-                    list="enquiry-places"
-                    value={form.destination}
-                    onChange={(value) =>
-                      setField("destination", value, { pod: "" })
-                    }
-                    placeholder="e.g. Hamburg"
-                    error={errors.destination}
-                  />
-                  <SelectField
-                    label={portLabels[0]}
-                    required
-                    value={form.pol}
-                    onChange={(value) => setField("pol", value)}
-                    options={getLocations(form.origin)}
-                    error={errors.pol}
-                    disabled={!form.origin.trim()}
-                    placeholder={
-                      form.origin.trim()
-                        ? "Select location"
-                        : "Enter origin first"
-                    }
-                  />
-                  <SelectField
-                    label={portLabels[1]}
-                    required
-                    value={form.pod}
-                    onChange={(value) => setField("pod", value)}
-                    options={getLocations(form.destination)}
-                    error={errors.pod}
-                    disabled={!form.destination.trim()}
-                    placeholder={
-                      form.destination.trim()
-                        ? "Select location"
-                        : "Enter destination first"
-                    }
-                  />
-                </div>
-                <p className="text-[10px] leading-4 text-slate-500 dark:text-gray-400">
-                  City missing? Type it in From/To — a generic location option
-                  will appear.
-                </p>
+                {form.origin && !originPortOptions.length && !portsLoading && (
+                  <p className="text-[10px] leading-4 text-amber-600 dark:text-amber-400">
+                    No {form.mode.toLowerCase()} ports found for "{form.origin}
+                    ".{" "}
+                    {(() => {
+                      const types = getAvailableTypesForCity(form.origin);
+                      return types.length
+                        ? `Available types: ${types.join(", ")}. Switch mode to continue.`
+                        : "No ports at all for this city.";
+                    })()}
+                  </p>
+                )}
+
+                {form.destination &&
+                  !destinationPortOptions.length &&
+                  !portsLoading && (
+                    <p className="text-[10px] leading-4 text-amber-600 dark:text-amber-400">
+                      No {form.mode.toLowerCase()} ports found for "
+                      {form.destination}".{" "}
+                      {(() => {
+                        const types = getAvailableTypesForCity(
+                          form.destination,
+                        );
+                        return types.length
+                          ? `Available types: ${types.join(", ")}. Switch mode to continue.`
+                          : "No ports at all for this city.";
+                      })()}
+                    </p>
+                  )}
               </Section>
             </div>
           )}
 
-          {/* STEP 3: Cargo Details */}
+          {/* STEP 3 */}
           {step === 3 && (
             <div className="space-y-2">
-              {/* Compact shipment summary strip */}
+              {/* Route summary */}
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 dark:border-gray-700 dark:bg-gray-800/60">
                 <div className="flex min-w-0 items-center gap-1.5 text-xs">
                   <span className="truncate font-semibold text-slate-900 dark:text-white">
@@ -947,8 +1365,11 @@ export default function EnquiryForm({ onBack = () => {}, onSave, editData }) {
                   </span>
                 </div>
                 <div className="min-w-0 flex-1 truncate text-[10px] text-slate-500 dark:text-gray-400">
-                  {form.pol || "Origin location"} →{" "}
-                  {form.pod || "Destination location"}
+                  {originPortOptions.find((o) => o.value === form.pol)
+                    ?.label || "Origin port"}{" "}
+                  →{" "}
+                  {destinationPortOptions.find((o) => o.value === form.pod)
+                    ?.label || "Destination port"}
                 </div>
                 <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold text-blue-700 dark:bg-blue-500/15 dark:text-blue-300">
                   {form.mode} · {form.movement}
@@ -976,22 +1397,56 @@ export default function EnquiryForm({ onBack = () => {}, onSave, editData }) {
                       disabled
                       error={errors.enquiryNo}
                     />
-                    <TextField
+                    {/* ✅ dd-mm-yyyy Date Input */}
+                    <DatePickerField
                       label="Enquiry date"
-                      type="date"
                       required
                       value={form.enquiryDate}
                       onChange={(value) => setField("enquiryDate", value)}
                       error={errors.enquiryDate}
                     />
                     <TextField
-                      label="Customer"
+                      label="Company"
                       required
-                      value={form.customer}
-                      onChange={(value) => setField("customer", value)}
-                      placeholder="Customer / company"
-                      error={errors.customer}
+                      value={form.company}
+                      onChange={(value) => setField("company", value)}
+                      placeholder="Company name"
+                      error={errors.company}
                       className="col-span-2"
+                    />
+                    <SelectField
+                      label="Cargo type"
+                      className="col-span-1"
+                      value={cargo.cargoTypeId}
+                      onChange={(value) =>
+                        setCargoField("cargoTypeId", value)
+                      }
+                      options={cargoTypeOptions}
+                      placeholder={
+                        lovLoading
+                          ? "Loading cargo types..."
+                          : cargoTypeOptions.length
+                            ? "Select cargo type"
+                            : "No cargo types available"
+                      }
+                      disabled={lovLoading || !cargoTypeOptions.length}
+                    />
+                    <SelectField
+                      label="Cargo group"
+                      className="col-span-1"
+                      value={cargo.cargoGroupId}
+                      onChange={(value) =>
+                        setCargoField("cargoGroupId", value)
+                      }
+                      options={cargoGroupOptions}
+                      placeholder={
+                        lovLoading
+                          ? "Loading cargo groups..."
+                          : cargoGroupOptions.length
+                            ? "Select cargo group"
+                            : "No cargo groups available"
+                      }
+                      disabled={lovLoading || !cargoGroupOptions.length}
                     />
                     <TextField
                       label="Cargo description"
@@ -1015,7 +1470,7 @@ export default function EnquiryForm({ onBack = () => {}, onSave, editData }) {
                       <>
                         <SelectField
                           className="col-span-2"
-                          label="Cargo type"
+                          label="Load type"
                           required
                           value={cargo.cargoType}
                           onChange={(value) =>
@@ -1185,7 +1640,6 @@ export default function EnquiryForm({ onBack = () => {}, onSave, editData }) {
                     )}
                   </div>
 
-                  {/* <div className="grid grid-cols-2 gap-1.5 border-t border-slate-100 pt-1.5 dark:border-gray-700"> */}
                   <div className="rounded-md bg-slate-50 px-2 py-1 dark:bg-gray-900">
                     <p className="text-[10px] text-slate-500 dark:text-gray-400">
                       Gross weight
@@ -1197,7 +1651,6 @@ export default function EnquiryForm({ onBack = () => {}, onSave, editData }) {
                       kg
                     </p>
                   </div>
-                  {/* </div> */}
                 </Section>
               </div>
 

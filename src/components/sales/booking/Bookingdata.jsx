@@ -34,7 +34,7 @@ export const fmtSize = (bytes) => {
 /* ------------------------------------------------------------------ */
 
 export const CURRENT_USER = {
-  id: "U04",
+  id: "",
   name: "John Doe",
   role: "Booking Executive",
   branch: "SGP",
@@ -72,7 +72,7 @@ export const users = [
   { value: "U01", label: "Priya Nair" },
   { value: "U02", label: "Rahul Mehta" },
   { value: "U03", label: "Sarah Lim" },
-  { value: "U04", label: "John Doe" },
+  { value: "", label: "John Doe" },
 ];
 
 export const customers = [
@@ -581,7 +581,7 @@ export const emptyForm = () => ({
   incotermPlace: "",
   shipper: "",
   consignee: "",
-  notifyParty: "SAME",
+  notifyParty: "",
   billingCustomer: "",
   pickupAddress: "",
   deliveryAddress: "",
@@ -976,7 +976,7 @@ export const initialBookings = [
     incotermPlace: "Singapore",
     shipper: "CUST001",
     consignee: "P102",
-    notifyParty: "SAME",
+    notifyParty: "",
     billingCustomer: "CUST001",
     cargoLines: [
       line({

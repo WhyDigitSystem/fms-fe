@@ -36,7 +36,7 @@ const Header = () => {
   let globalParam = {};
 
   try {
-    globalParam = JSON.parse(localStorage.getItem("globalParams") || "{}");
+    globalParam = JSON.parse(localStorage.getItem("globalParam") || "{}");
   } catch (error) {
     console.error("Error parsing globalParams:", error);
   }
@@ -73,16 +73,7 @@ const Header = () => {
   );
 
   const loginBranchCode = getDisplayValue(
-    globalParam?.branchcode ??
-      globalParam?.branchCode ??
-      localStorage.getItem("branchcode") ??
-      localStorage.getItem("branchCode"),
-    ["branchCode", "code", "name", "value"],
-  );
-
-  const loginCustomer = getDisplayValue(
-    globalParam?.customer ?? localStorage.getItem("customer"),
-    ["customerName", "customerCode", "name", "code", "label", "value"],
+    globalParam?.branchcode,
   );
 
   const loginClient = getDisplayValue(
@@ -175,13 +166,6 @@ const Header = () => {
       color:
         "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300",
       title: loginBranchCode ? `Branch Code: ${loginBranchCode}` : "Branch",
-    },
-    {
-      label: loginCustomer || "Customer",
-      icon: UserCog,
-      color:
-        "bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300",
-      title: "Customer",
     },
     {
       label: loginFinYear || "Financial Year",
