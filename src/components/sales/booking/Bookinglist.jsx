@@ -13,6 +13,7 @@ import {
   Pencil,
   Plane,
   Plus,
+  RefreshCw,
   Search,
   Ship,
   Truck,
@@ -68,8 +69,37 @@ const SelectBox = ({ value, onChange, options, label, className = "" }) => (
   </div>
 );
 
+// Safely derive a display label from a port value that may be a string
+// or an object like { id, portType, portCode, portName }.
+const getPortLabel = (port) => {
+  if (!port) return "";
+  if (typeof port === "string") return port;
+  return port.portName || port.portCode || "";
+};
+
+const formatDate = (value) => {
+  if (!value) return "-";
+
+  const datePart = String(value).split("T")[0];
+
+  // Already in dd-mm-yyyy format
+  if (/^\d{2}-\d{2}-\d{4}$/.test(datePart)) {
+    return datePart;
+  }
+
+  // Convert yyyy-mm-dd to dd-mm-yyyy
+  const match = datePart.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+
+  if (match) {
+    const [, year, month, day] = match;
+    return `${day}-${month}-${year}`;
+  }
+
+  return value;
+};
+
 const LocationCell = ({ code }) => {
-  const displayName = code || "-";
+  const displayName = getPortLabel(code) || "-";
 
   return (
     <>
@@ -104,8 +134,10 @@ const mapApiToRow = (item) => {
     bookingType: item.bookingType || "Export",
     mode: item.transportMode || "Sea",
     serviceType: item.serviceType || "",
-    origin: routing.origin || "",
-    destination: routing.destination || "",
+    origin: getPortLabel(routing.origin),
+    destination: getPortLabel(routing.destination),
+    originRaw: routing.origin || null,
+    destinationRaw: routing.destination || null,
     etd: routing.requestedETD || "",
     status: item.bookingStatus || "Draft",
     customerRef: item.customerReference || "",
@@ -129,6 +161,7 @@ const Bookinglist = ({
   onAddNew,
   onEdit,
   onBack,
+  onReload,          // ✅ NEW: parent-supplied reload handler
   toast,
   onDismissToast,
 }) => {
@@ -137,6 +170,7 @@ const Bookinglist = ({
   const [statusFilter, setStatusFilter] = useState("All");
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [refreshing, setRefreshing] = useState(false);
 
   // Back Navigation
   const handleBack = () => {
@@ -183,19 +217,6 @@ const Bookinglist = ({
   const startIndex = (currentPage - 1) * pageSize;
   const currentItems = filtered.slice(startIndex, startIndex + pageSize);
 
-  console.log(
-    "🟢 BookingList rendering. Current page:",
-    currentPage,
-    "Page size:",
-    pageSize,
-    "Total pages:",
-    totalPages,
-    "Filtered items:",
-    filtered.length,
-    "Current items:",
-    currentItems.length,
-  );
-
   useEffect(() => {
     setCurrentPage(1);
   }, [search, modeFilter, statusFilter, pageSize]);
@@ -213,6 +234,17 @@ const Bookinglist = ({
 
     return () => clearTimeout(t);
   }, [toast, onDismissToast]);
+
+  // ✅ Manual refresh button handler
+  const handleRefresh = async () => {
+    if (!onReload || refreshing) return;
+    setRefreshing(true);
+    try {
+      await onReload();
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   const stats = [
     {
@@ -275,14 +307,32 @@ const Bookinglist = ({
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={onAddNew}
-            className="inline-flex h-8 items-center gap-1.5 rounded-md bg-blue-600 px-3.5 text-xs font-semibold text-white shadow-sm transition hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-300 dark:focus:ring-blue-900"
-          >
-            <Plus size={14} />
-            New Booking
-          </button>
+          <div className="flex items-center gap-2">
+            {onReload && (
+              <button
+                type="button"
+                onClick={handleRefresh}
+                disabled={refreshing || loading}
+                title="Refresh list"
+                className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:bg-gray-800/40 dark:text-gray-300 dark:hover:bg-gray-800"
+              >
+                <RefreshCw
+                  size={13}
+                  className={refreshing ? "animate-spin" : ""}
+                />
+                Refresh
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={onAddNew}
+              className="inline-flex h-8 items-center gap-1.5 rounded-md bg-blue-600 px-3.5 text-xs font-semibold text-white shadow-sm transition hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-300 dark:focus:ring-blue-900"
+            >
+              <Plus size={14} />
+              New Booking
+            </button>
+          </div>
         </div>
 
         {/* Toast */}
@@ -416,17 +466,17 @@ const Bookinglist = ({
 
                     return (
                       <tr
-                        key={item.id ?? item.docId}
+                        key={item.id ?? item.bookingNo}
                         className="transition hover:bg-slate-50/80 dark:hover:bg-gray-800/60"
                       >
                         <td className="whitespace-nowrap px-3 py-2 align-middle">
                           <span className="font-semibold text-blue-700 dark:text-blue-400">
-                            {item.docId || "-"}
+                            {item.bookingNo || "-"}
                           </span>
                         </td>
 
                         <td className="whitespace-nowrap px-3 py-2 align-middle text-slate-600 dark:text-gray-300">
-                          {item.bookingDate || "-"}
+                          {formatDate(item.bookingDate)}
                         </td>
 
                         <td className="max-w-[190px] px-3 py-2 align-middle">
@@ -482,7 +532,7 @@ const Bookinglist = ({
                         </td>
 
                         <td className="whitespace-nowrap px-3 py-2 align-middle text-slate-600 dark:text-gray-300">
-                          {item.etd || "-"}
+                          {formatDate(item.etd)}
                         </td>
 
                         <td className="max-w-[170px] px-3 py-2 align-middle text-slate-600 dark:text-gray-300">
@@ -502,14 +552,12 @@ const Bookinglist = ({
 
                         <td className="whitespace-nowrap px-3 py-2 align-middle">
                           <span
-                            className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ring-inset ${
-                              statusStyles[status] || statusStyles.Draft
-                            }`}
+                            className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ring-inset ${statusStyles[status] || statusStyles.Draft
+                              }`}
                           >
                             <span
-                              className={`h-1.5 w-1.5 rounded-full ${
-                                statusDots[status] || statusDots.Draft
-                              }`}
+                              className={`h-1.5 w-1.5 rounded-full ${statusDots[status] || statusDots.Draft
+                                }`}
                             />
 
                             {status}

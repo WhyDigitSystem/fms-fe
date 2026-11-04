@@ -70,6 +70,8 @@ const portLabel = (value) => {
   if (typeof value === "string" || typeof value === "number")
     return String(value);
   if (typeof value === "object") {
+    if (value.portName && value.portCode)
+      return `${value.portName} (${value.portCode})`;
     if (value.portCode) return String(value.portCode);
     if (value.portName) return String(value.portName);
     return "";
@@ -87,6 +89,104 @@ const customerLabel = (value) => {
     return "";
   }
   return "";
+};
+
+const pad2 = (n) => String(n).padStart(2, "0");
+
+const formatDisplayDate = (value) => {
+  if (value == null || value === "") return "";
+  const s = String(value).trim();
+  if (/^\d{2}-\d{2}-\d{4}$/.test(s)) return s;
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return `${m[3]}-${m[2]}-${m[1]}`;
+  const d = new Date(s);
+  if (!Number.isNaN(d.getTime())) {
+    return `${pad2(d.getDate())}-${pad2(d.getMonth() + 1)}-${d.getFullYear()}`;
+  }
+  return s;
+};
+
+// ✅ Extract the base doc id by stripping revision suffixes (e.g., "-2", "-3")
+const getBaseDocId = (docId) => {
+  if (!docId) return "";
+  return docId.replace(/-\d+$/, "");
+};
+
+// ✅ Transform API data to the shape expected by the PDF builder
+const mapApiToPdf = (raw) => {
+  const ci = raw.customerInformation?.[0] || {};
+  const ct = raw.commercialTerms?.[0] || {};
+
+  return {
+    quotationNo: raw.docId || "Draft",
+    quotationDate: raw.docDate || "",
+    expirationDate: raw.expirationDate || "",
+    company: raw.companyName || "",
+    service: raw.serviceType || "",
+    incoterm: raw.incoterm || "",
+    paymentTerms: raw.paymentTerms || "",
+    currencyCode: raw.currency?.currencyName || "INR",
+
+    originCity: raw.originCity?.city || "",
+    originPort: portLabel(raw.originPort),
+    destinationCity: raw.destinationCity?.city || "",
+    destinationPort: portLabel(raw.destinationPort),
+
+    customerName: ci.customerName || "",
+    customerPhone: ci.customerPhone || "",
+    customerEmail: ci.customerEmail || "",
+    customerAddress: ci.customerAddress || "",
+    agentName: ci.agentName || raw.agentName || "",
+    agentPhone: ci.agentPhone || "",
+    agentEmail: ci.agentEmail || "",
+
+    packages: raw.shippingDetails?.map((p) => ({
+      quantity: p.quantity,
+      weight: p.packageWeight,
+      weightUnit: p.weightUnit,
+      length: p.length,
+      width: p.width,
+      height: p.height,
+      dimensionUnit: p.dimensionUnit,
+      cargoType: p.cargoType,
+      cargoDescription: p.cargoDescription,
+    })) || [],
+
+    originCharges: raw.originCharges?.map((c) => ({
+      description: c.chargeDescription,
+      rate: c.rate,
+      rateUnit: c.rateUnit,
+      minimumCharge: c.minimumCharge,
+      quantity: c.quantityUnits,
+      basis: c.chargeableBasis,
+      notes: c.chargeNotes,
+    })) || [],
+
+    airRates: raw.airFreightRates?.map((a) => ({
+      airlineName: a.airlineName,
+      airlineCode: a.airlineCode,
+      productName: a.productName,
+      destinationCode: a.destinationCode,
+      transitVia: a.transitVia,
+      rateType: a.freightRateType,
+      minimumWeight: a.minimumWeight,
+      ratePerKg: a.ratePerKg,
+      fuelRate: a.fuelRate,
+      riskRate: a.riskRate,
+      remarks: a.rateRemarks,
+    })) || [],
+
+    insurancePercentage: ct.insurancePercentage,
+    cargoValue: ct.cargoValue,
+    profitSharingPercentage: ct.profitSharingPercentage,
+    bankExchangePercentage: ct.bankExchangePercentage,
+    freeStorageDays: ct.freeStorageDays,
+    storageRate: ct.storageRate,
+    storageMinimumCharge: ct.storageMinimumCharge,
+    rateValidityRemarks: ct.rateValidityRemarks,
+    terms: ct.termsAndConditions,
+    remarks: ct.generalRemarks || raw.remarks,
+  };
 };
 
 // Normalise a quotation record into a safe, render-ready row
@@ -110,31 +210,24 @@ const toRow = (item) => {
 
   return {
     ...item,
-
-    // IDs / dates
     id: item.id,
     quotationNo: item.quotationNo || item.docId || "",
-    quotationDate: item.quotationDate || item.docDate || "",
-    expirationDate: item.expirationDate || "",
-
-    // Customer
+    docId: item.docId || "",
+    baseDocId: getBaseDocId(item.docId || item.quotationNo),
+    quotationDate: formatDisplayDate(item.quotationDate || item.docDate),
+    expirationDate: formatDisplayDate(item.expirationDate),
     customerName: customerLabel(ci.customerName) || "-",
     company: item.company || item.companyName || "-",
-
-    // Route
-    originCode: originPort || "-",
-    destinationCode: destinationPort || "-",
+    originCode: portLabel(item.originPort).match(/\(([^)]+)\)/)?.[1] || portLabel(item.originPort) || "-",
+    destinationCode: portLabel(item.destinationPort).match(/\(([^)]+)\)/)?.[1] || portLabel(item.destinationPort) || "-",
     originCity: cityLabel(item.originCity) || "-",
     destinationCity: cityLabel(item.destinationCity) || "-",
-
-    // Meta
     service: item.service || item.serviceType || "-",
     incoterm: item.incoterm || "-",
     status: item.status || "Draft",
-
-    // Preserved for PDF / edit
     _raw: item,
     _ct: ct,
+    createdTime: item.createdDate ? new Date(item.createdDate).getTime() : 0,
   };
 };
 
@@ -171,13 +264,54 @@ const QuotationList = ({
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
-  // ✅ Normalise once per data change
-  const rows = useMemo(() => quotations.map(toRow), [quotations]);
+  const [expandedGroups, setExpandedGroups] = useState({});
+
+  const groupedRows = useMemo(() => {
+    const groups = {};
+    quotations.forEach((item) => {
+      const row = toRow(item);
+      const key = row.baseDocId || "UNKNOWN";
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(row);
+    });
+
+    Object.values(groups).forEach((group) => {
+      group.sort((a, b) => (b.id || 0) - (a.id || 0));
+    });
+
+    return groups;
+  }, [quotations]);
+
+  const flattenedRows = useMemo(() => {
+    const sortedGroups = Object.values(groupedRows).sort((groupA, groupB) => {
+      const latestA = groupA[0];
+      const latestB = groupB[0];
+      if (latestB.createdTime !== latestA.createdTime) {
+        return latestB.createdTime - latestA.createdTime;
+      }
+      return String(latestB.docId).localeCompare(String(latestA.docId));
+    });
+
+    const list = [];
+    sortedGroups.forEach((group) => {
+      const baseId = group[0].baseDocId;
+      const isExpanded = expandedGroups[baseId];
+
+      list.push({ ...group[0], isPrimary: true, totalRevisions: group.length });
+
+      if (isExpanded && group.length > 1) {
+        group.slice(1).forEach((rev) => {
+          list.push({ ...rev, isPrimary: false, totalRevisions: group.length });
+        });
+      }
+    });
+    return list;
+  }, [groupedRows, expandedGroups]);
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
 
-    return rows.filter((item) => {
+    return flattenedRows.filter((item) => {
       const matchesSearch = [
         item.quotationNo,
         item.quotationDate,
@@ -202,11 +336,12 @@ const QuotationList = ({
         (statusFilter === "All" || item.status === statusFilter)
       );
     });
-  }, [rows, search, statusFilter]);
+  }, [flattenedRows, search, statusFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const startIndex = (currentPage - 1) * pageSize;
   const currentItems = filtered.slice(startIndex, startIndex + pageSize);
+  console.log("currentItems", currentItems);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -216,23 +351,35 @@ const QuotationList = ({
     if (currentPage > totalPages) setCurrentPage(totalPages);
   }, [currentPage, totalPages]);
 
+  const toggleGroup = (baseDocId) => {
+    setExpandedGroups((prev) => ({
+      ...prev,
+      [baseDocId]: !prev[baseDocId],
+    }));
+  };
+
+  const handleDownloadPdf = (rawItem) => {
+    const pdfData = mapApiToPdf(rawItem);
+    downloadQuotationPdf(pdfData);
+  };
+
   const stats = [
     {
       label: "Total Quotations",
-      value: rows.length,
+      value: quotations.length,
       icon: FileText,
       color: "text-blue-600 bg-blue-50 dark:bg-blue-500/10 dark:text-blue-400",
     },
     {
       label: "Sent",
-      value: rows.filter((i) => i.status === "Sent").length,
+      value: quotations.filter((i) => (i.status || "Draft") === "Sent").length,
       icon: Send,
       color:
         "text-amber-600 bg-amber-50 dark:bg-amber-500/10 dark:text-amber-400",
     },
     {
       label: "Accepted",
-      value: rows.filter((i) => i.status === "Accepted").length,
+      value: quotations.filter((i) => (i.status || "Draft") === "Accepted").length,
       icon: CheckCircle2,
       color:
         "text-emerald-600 bg-emerald-50 dark:bg-emerald-500/10 dark:text-emerald-400",
@@ -368,15 +515,65 @@ const QuotationList = ({
                 ) : (
                   currentItems.map((item) => {
                     const status = item.status || "Draft";
+                    const isPrimary = item.isPrimary;
+                    const hasRevisions = item.totalRevisions > 1;
+                    const isExpanded = expandedGroups[item.baseDocId];
+
                     return (
                       <tr
                         key={item.id ?? item.quotationNo}
-                        className="transition hover:bg-slate-50/80 dark:hover:bg-gray-800/60"
+                        className={`transition hover:bg-slate-50/80 dark:hover:bg-gray-800/60 ${!isPrimary
+                          ? "bg-slate-50/30 dark:bg-gray-800/20"
+                          : ""
+                          }`}
                       >
                         <td className="whitespace-nowrap px-3 py-2 align-middle">
-                          <span className="font-semibold text-blue-700 dark:text-blue-400">
-                            {item.quotationNo || "-"}
-                          </span>
+                          <div className="flex items-center gap-2">
+                            {/* ✅ Toggle Button */}
+                            {isPrimary && hasRevisions ? (
+                              <button
+                                type="button"
+                                onClick={() => toggleGroup(item.baseDocId)}
+                                className="flex h-5 w-5 items-center justify-center rounded text-slate-400 hover:bg-slate-200 hover:text-slate-700 dark:hover:bg-gray-700 dark:hover:text-gray-200"
+                                title={
+                                  isExpanded
+                                    ? "Hide revisions"
+                                    : "Show revisions"
+                                }
+                              >
+                                {isExpanded ? (
+                                  <ChevronDown size={14} />
+                                ) : (
+                                  <ChevronRight size={14} />
+                                )}
+                              </button>
+                            ) : (
+                              <span className="w-5 shrink-0" /> // Spacer for non-toggle items
+                            )}
+
+                            <span
+                              className={`font-semibold ${isPrimary
+                                ? "text-blue-700 dark:text-blue-400"
+                                : "text-slate-500 dark:text-gray-400"
+                                }`}
+                            >
+                              {item.quotationNo || "-"}
+                            </span>
+
+                            {/* ✅ Revision Count Badge */}
+                            {isPrimary && hasRevisions && (
+                              <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[9px] font-medium text-slate-600 dark:bg-gray-700 dark:text-gray-300">
+                                +{item.totalRevisions - 1}
+                              </span>
+                            )}
+
+                            {/* ✅ Revision tag for non-primary rows */}
+                            {!isPrimary && (
+                              <span className="rounded-full bg-amber-50 px-1.5 py-0.5 text-[9px] font-medium text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">
+                                Revision
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="whitespace-nowrap px-3 py-2 align-middle text-slate-600 dark:text-gray-300">
                           {item.quotationDate || "-"}
@@ -418,7 +615,8 @@ const QuotationList = ({
                           </span>
                         </td>
                         <td className="whitespace-nowrap px-3 py-2 text-right align-middle font-semibold text-slate-800 dark:text-gray-100">
-                          {formatMoney(bestTotal(item._raw))}
+                          {/* {formatMoney(bestTotal(item._raw))} */}
+                          {formatMoney(item._ct?.airlineQuotationTotal ?? 0)}
                         </td>
                         <td className="whitespace-nowrap px-3 py-2 align-middle">
                           <span
@@ -434,33 +632,41 @@ const QuotationList = ({
                         </td>
                         <td className="px-3 py-2 align-middle">
                           <div className="flex justify-center gap-1.5">
+                            {/* ✅ Map data before passing to PDF builder */}
                             <button
                               type="button"
-                              onClick={() => downloadQuotationPdf(item._raw)}
+                              onClick={() => handleDownloadPdf(item._raw)}
                               className="flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 text-slate-500 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 dark:border-gray-700 dark:text-gray-300 dark:hover:border-blue-500/40 dark:hover:bg-blue-500/10 dark:hover:text-blue-300"
                               title="Download PDF"
                             >
                               <Download size={13} />
                             </button>
 
-                            <button
-                              type="button"
-                              onClick={() => onEdit?.(item._raw)}
-                              className="flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 text-slate-500 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 dark:border-gray-700 dark:text-gray-300 dark:hover:border-blue-500/40 dark:hover:bg-blue-500/10 dark:hover:text-blue-300"
-                              title="Edit quotation"
-                            >
-                              <Pencil size={13} />
-                            </button>
+                            {/* Edit + Revise only for the latest (primary) revision */}
+                            {isPrimary && (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => onEdit?.(item._raw)}
+                                  className="flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 text-slate-500 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 dark:border-gray-700 dark:text-gray-300 dark:hover:border-blue-500/40 dark:hover:bg-blue-500/10 dark:hover:text-blue-300"
+                                  title="Edit quotation"
+                                >
+                                  <Pencil size={13} />
+                                </button>
 
-                            <button
-                              type="button"
-                              onClick={() => onEdit?.(item._raw)}
-                              className="flex h-7 items-center justify-center gap-1 rounded-md border border-slate-200 px-2 text-slate-500 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 dark:border-gray-700 dark:text-gray-300 dark:hover:border-blue-500/40 dark:hover:bg-blue-500/10 dark:hover:text-blue-300"
-                              title="Revise quotation"
-                            >
-                              <RefreshCw size={13} />
-                              <span className="text-[10px] font-semibold">Revise</span>
-                            </button>
+                                <button
+                                  type="button"
+                                  onClick={() => onEdit?.(item._raw)}
+                                  className="flex h-7 items-center justify-center gap-1 rounded-md border border-slate-200 px-2 text-slate-500 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 dark:border-gray-700 dark:text-gray-300 dark:hover:border-blue-500/40 dark:hover:bg-blue-500/10 dark:hover:text-blue-300"
+                                  title="Revise quotation"
+                                >
+                                  <RefreshCw size={13} />
+                                  <span className="text-[10px] font-semibold">
+                                    Revise
+                                  </span>
+                                </button>
+                              </>
+                            )}
                           </div>
                         </td>
                       </tr>

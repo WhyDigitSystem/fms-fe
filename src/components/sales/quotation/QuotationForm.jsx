@@ -235,18 +235,18 @@ const serviceTypes = [
   "Airport to Airport",
   "Airport to Door",
 ];
+
 const incoterms = [
-  "EXW",
-  "FCA",
-  "FOB",
-  "CIF",
-  "CIP",
-  "CPT",
-  "DAP",
-  "DDP",
-  "DPU",
+  "EXW", "FCA", "FOB", "CIF",
+  "CIP", "CPT", "DAP", "DDP", "DPU",
 ];
-const statuses = ["Draft", "Sent", "Accepted", "Expired"];
+
+const statuses = [
+  "Draft",
+  "Sent",
+  "Accepted",
+  "Expired",
+];
 const rateUnits = [
   "Shipment",
   "Inspection",
@@ -408,40 +408,54 @@ const SelectField = ({
   onChange,
   options = [],
   placeholder = "Select an option",
-  disabled,
+  disabled = false,
   className = "",
-}) => (
-  <Field label={label} required={required} error={error} className={className}>
-    <div className="relative">
-      <select
-        value={value ?? ""}
-        disabled={disabled}
-        aria-invalid={!!error}
-        aria-required={required || undefined}
-        onChange={(e) => onChange(e.target.value)}
-        className={`${inputClass} appearance-none pr-7 ${error ? "!border-rose-500 focus:!ring-rose-500/10" : ""
-          }`}
-      >
-        <option value="">{placeholder}</option>
-        {options.map((option) => {
-          const item =
-            typeof option === "string"
-              ? { value: option, label: option }
-              : option;
-          return (
-            <option key={item.value} value={item.value}>
-              {item.label}
+}) => {
+  const normalizedOptions = options.map((option) =>
+    typeof option === "string"
+      ? { value: option, label: option }
+      : {
+        value: String(option.value),
+        label: option.label,
+      }
+  );
+
+  return (
+    <Field
+      label={label}
+      required={required}
+      error={error}
+      className={className}
+    >
+      <div className="relative">
+        <select
+          value={value ?? ""}
+          disabled={disabled}
+          onChange={(e) => onChange?.(e.target.value)}
+          className={`${inputClass} appearance-none pr-7 cursor-pointer ${error ? "!border-rose-500" : ""
+            }`}
+        >
+          <option value="">{placeholder}</option>
+
+          {normalizedOptions.map((option) => (
+            <option
+              key={option.value}
+              value={option.value}
+            >
+              {option.label}
             </option>
-          );
-        })}
-      </select>
-      <ChevronDown
-        size={11}
-        className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-slate-400"
-      />
-    </div>
-  </Field>
-);
+          ))}
+        </select>
+
+        <ChevronDown
+          size={11}
+          className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-slate-400"
+        />
+      </div>
+    </Field>
+  );
+};
+
 
 /* ✅ Searchable combobox for city & enquiry pickers */
 const SearchableSelectField = ({
@@ -594,8 +608,8 @@ const SearchableSelectField = ({
                         setOpen(false);
                       }}
                       className={`flex w-full items-center justify-between gap-2 px-2.5 py-1.5 text-left hover:bg-blue-50 dark:hover:bg-blue-500/10 ${String(val) === String(value)
-                          ? "bg-blue-50/60 font-semibold text-blue-700 dark:bg-blue-500/10 dark:text-blue-300"
-                          : "text-slate-700 dark:text-gray-200"
+                        ? "bg-blue-50/60 font-semibold text-blue-700 dark:bg-blue-500/10 dark:text-blue-300"
+                        : "text-slate-700 dark:text-gray-200"
                         }`}
                     >
                       <span className="truncate">{lbl}</span>
@@ -693,8 +707,8 @@ const Stat = ({ label, value, strong }) => (
     <p className="text-[10px] text-slate-500 dark:text-gray-400">{label}</p>
     <p
       className={`mt-0.5 text-[12px] ${strong
-          ? "font-bold text-blue-700 dark:text-blue-300"
-          : "font-semibold text-slate-800 dark:text-gray-100"
+        ? "font-bold text-blue-700 dark:text-blue-300"
+        : "font-semibold text-slate-800 dark:text-gray-100"
         }`}
     >
       {value}
@@ -743,7 +757,6 @@ const QuotationForm = ({ onBack = () => { }, onSave, editData }) => {
 
   const [currencyList, setCurrencyList] = useState([]);
   const [enquiries, setEnquiries] = useState([]);
-  const [ports, setPorts] = useState([]);
 
   const orgId = parseInt(localStorage.getItem("orgId")) || 1000000001;
   const branch = parseInt(localStorage.getItem("branchId")) || orgId;
@@ -770,15 +783,6 @@ const QuotationForm = ({ onBack = () => { }, onSave, editData }) => {
       console.error("Failed to load enquiries:", error);
     }
   }, [branch, orgId]);
-
-  const fetchPorts = useCallback(async () => {
-    try {
-      const rows = await EnquiryAPI.getPortByOrgIdAndBranch(orgId, branch);
-      setPorts(Array.isArray(rows) ? rows : []);
-    } catch (error) {
-      console.error("Failed to load ports:", error);
-    }
-  }, [orgId, branch]);
 
   const fetchCurrencies = useCallback(async () => {
     try {
@@ -945,8 +949,7 @@ const QuotationForm = ({ onBack = () => { }, onSave, editData }) => {
   useEffect(() => {
     fetchCurrencies();
     fetchEnquiries();
-    fetchPorts();
-  }, [fetchCurrencies, fetchEnquiries, fetchPorts]);
+  }, [fetchCurrencies, fetchEnquiries]);
 
   useEffect(() => {
     if (editData?.id) fetchQuotationById(editData.id);
@@ -969,68 +972,98 @@ const QuotationForm = ({ onBack = () => { }, onSave, editData }) => {
     [enquiries],
   );
 
-  const getPortOptionsForCity = useCallback(
-    (city) => {
-      if (!city || !ports.length) return [];
-      const cityUpper = String(city).trim().toUpperCase();
-      return ports
-        .filter(
-          (p) =>
-            String(p?.city?.city || "").trim().toUpperCase() === cityUpper,
-        )
-        .map((p) => ({
-          value: String(p.id),
-          label: `${p.portName} (${p.portCode})`,
-        }));
-    },
-    [ports],
+  const selectedEnquiry = useMemo(
+    () =>
+      enquiries.find(
+        (e) => String(e.id) === String(form.enquiryNo)
+      ),
+    [enquiries, form.enquiryNo]
   );
 
-  const originPortOptions = useMemo(
-    () => getPortOptionsForCity(form.originCity),
-    [getPortOptionsForCity, form.originCity],
-  );
+  const getEnquiryPort = (enquiry, isOrigin = true) => {
+    if (!enquiry) return null;
 
-  const destinationPortOptions = useMemo(
-    () => getPortOptionsForCity(form.destinationCity),
-    [getPortOptionsForCity, form.destinationCity],
-  );
+    const mode = String(enquiry.shipmentMode || "").toUpperCase();
+
+    if (isOrigin) {
+      return (
+        enquiry.originTerminal ||
+        enquiry.originPort ||
+        enquiry.originAirport ||
+        null
+      );
+    }
+
+    return (
+      enquiry.destinationTerminal ||
+      enquiry.destinationPort ||
+      enquiry.destinationAirport ||
+      null
+    );
+  };
+
+  const originPortOptions = useMemo(() => {
+    const port = getEnquiryPort(selectedEnquiry, true);
+
+    if (!port?.id) return [];
+
+    return [
+      {
+        value: String(port.id),
+        label: `${port.portName} (${port.portCode})`,
+      },
+    ];
+  }, [selectedEnquiry]);
+
+  const destinationPortOptions = useMemo(() => {
+    const port = getEnquiryPort(selectedEnquiry, false);
+
+    if (!port?.id) return [];
+
+    return [
+      {
+        value: String(port.id),
+        label: `${port.portName} (${port.portCode})`,
+      },
+    ];
+  }, [selectedEnquiry]);
 
   // --------------------------------------------------------------
   // Auto-fill from enquiry
   // --------------------------------------------------------------
   const handleEnquirySelect = (enquiryId) => {
-    const found = enquiries.find((e) => String(e.id) === String(enquiryId));
+    const found = enquiries.find(
+      (e) => String(e.id) === String(enquiryId)
+    );
+
     if (!found) {
-      setForm((p) => ({ ...p, enquiryNo: enquiryId, enquiryDate: "" }));
+      setForm((prev) => ({
+        ...prev,
+        enquiryNo: "",
+        enquiryDate: "",
+        shipmentMode: "",
+        movement: "",
+        company: "",
+
+        originCity: "",
+        originCityId: "",
+        originPort: "",
+        originPortId: "",
+
+        destinationCity: "",
+        destinationCityId: "",
+        destinationPort: "",
+        destinationPortId: "",
+      }));
+
       return;
     }
 
-    const mode = String(found.shipmentMode || "").toUpperCase();
-    const originPortVal =
-      mode === "SEA"
-        ? found.originPort
-        : mode === "AIR"
-          ? found.originAirport
-          : mode === "ROAD"
-            ? found.originTerminal
-            : found.originPort ||
-            found.originAirport ||
-            found.originTerminal;
+    const originPortVal = getEnquiryPort(found, true);
+    const destinationPortVal = getEnquiryPort(found, false);
 
-    const destinationPortVal =
-      mode === "SEA"
-        ? found.destinationPort
-        : mode === "AIR"
-          ? found.destinationAirport
-          : mode === "ROAD"
-            ? found.destinationTerminal
-            : found.destinationPort ||
-            found.destinationAirport ||
-            found.destinationTerminal;
-
-    setForm((p) => ({
-      ...p,
+    setForm((prev) => ({
+      ...prev,
 
       enquiryNo: String(found.id),
       enquiryDate: isoToDisplay(found.docDate || ""),
@@ -1038,14 +1071,17 @@ const QuotationForm = ({ onBack = () => { }, onSave, editData }) => {
       shipmentMode: plainLabel(found.shipmentMode),
       movement: plainLabel(found.movement),
 
-      company: found.company || p.company || "",
+      company: found.company || "",
 
       originCity: cityLabel(found.fromLocation),
       originCityId: idValue(found.fromLocation),
+
       originPort: portLabel(originPortVal),
       originPortId: idValue(originPortVal),
+
       destinationCity: cityLabel(found.toLocation),
       destinationCityId: idValue(found.toLocation),
+
       destinationPort: portLabel(destinationPortVal),
       destinationPortId: idValue(destinationPortVal),
     }));
@@ -1106,7 +1142,45 @@ const QuotationForm = ({ onBack = () => { }, onSave, editData }) => {
     req("originPort", "Origin port");
     req("destinationCity", "Destination city");
     req("destinationPort", "Destination port");
+
+    // Customer required
     req("customerName", "Customer name");
+    req("customerPhone", "Customer phone");
+
+    // Agent required
+    req("agentName", "Agent name");
+    req("agentPhone", "Agent phone");
+
+    // Validate that if an enquiry is selected, the ports match the enquiry's ports
+    if (form.enquiryNo) {
+      const selectedEnquiry = enquiries.find(
+        (enq) => String(enq.id) === String(form.enquiryNo),
+      );
+      if (selectedEnquiry) {
+        const mode = String(selectedEnquiry.shipmentMode || "").toUpperCase();
+        const enqOriginPort = mode === "SEA"
+          ? selectedEnquiry.originPort
+          : mode === "AIR"
+            ? selectedEnquiry.originAirport
+            : mode === "ROAD"
+              ? selectedEnquiry.originTerminal
+              : null;
+        const enqDestPort = mode === "SEA"
+          ? selectedEnquiry.destinationPort
+          : mode === "AIR"
+            ? selectedEnquiry.destinationAirport
+            : mode === "ROAD"
+              ? selectedEnquiry.destinationTerminal
+              : null;
+
+        if (enqOriginPort && String(form.originPortId) !== String(enqOriginPort.id)) {
+          e.originPort = "Must match the enquiry's origin port";
+        }
+        if (enqDestPort && String(form.destinationPortId) !== String(enqDestPort.id)) {
+          e.destinationPort = "Must match the enquiry's destination port";
+        }
+      }
+    }
 
     const qIso = displayToIso(form.quotationDate);
     const eIso = displayToIso(form.expirationDate);
@@ -1119,6 +1193,17 @@ const QuotationForm = ({ onBack = () => { }, onSave, editData }) => {
       e.customerEmail = "Enter a valid email";
     if (form.agentEmail && !emailRe.test(form.agentEmail))
       e.agentEmail = "Enter a valid email";
+
+    // Phone validation: exactly 10 digits
+    const phoneRe = /^\d{10}$/;
+
+    if (form.customerPhone && !phoneRe.test(form.customerPhone)) {
+      e.customerPhone = "Phone number must contain exactly 10 digits";
+    }
+
+    if (form.agentPhone && !phoneRe.test(form.agentPhone)) {
+      e.agentPhone = "Phone number must contain exactly 10 digits";
+    }
 
     const pct = (name) => {
       const v = form[name];
@@ -1165,35 +1250,47 @@ const QuotationForm = ({ onBack = () => { }, onSave, editData }) => {
         "Each airline rate needs airline, product, destination and rate per KG";
 
     setErrors(e);
-    return Object.keys(e).length === 0;
+    return e;
   };
 
   const goNext = () => {
-    if (!validate()) {
-      const stepErrors =
-        {
-          1: [
-            "quotationDate",
-            "expirationDate",
-            "company",
-            "service",
-            "currency",
-            "paymentTerms",
-            "incoterm",
-            "customerName",
-          ],
-          2: [
-            "originCity",
-            "originPort",
-            "destinationCity",
-            "destinationPort",
-          ],
-          3: [],
-        }[step] || [];
-      if (stepErrors.some((f) => errors[f])) return;
-    }
-    setErrors({});
-    setStep((s) => Math.min(3, s + 1));
+    // Validate all fields and get the errors immediately
+    const validationErrors = validate();
+
+    // Fields to validate for the current tab
+    const stepFields = {
+      1: [
+        "quotationDate",
+        "expirationDate",
+        "company",
+        "service",
+        "currency",
+        "paymentTerms",
+        "incoterm",
+        "customerName",
+        "customerPhone",
+        "agentName",
+        "agentPhone",
+        "originCity",
+        "originPort",
+        "destinationCity",
+        "destinationPort",
+        "customerEmail",
+        "agentEmail",
+      ],
+      2: ["packages"],
+      3: ["originCharges", "airRates"],
+    }[step] || [];
+
+    // Check only the current tab's errors
+    const hasStepError = stepFields.some(
+      (field) => validationErrors[field]
+    );
+
+    if (hasStepError) return;
+
+    // Move exactly one tab forward
+    setStep((currentStep) => Math.min(3, currentStep + 1));
   };
 
   const goPrevious = () => {
@@ -1361,7 +1458,9 @@ const QuotationForm = ({ onBack = () => { }, onSave, editData }) => {
   };
 
   const handleSave = async () => {
-    if (!validate()) return;
+    const validationErrors = validate();
+
+    if (Object.keys(validationErrors).length > 0) return;
     if (typeof onSave !== "function") {
       setErrors((p) => ({
         ...p,
@@ -1407,11 +1506,14 @@ const QuotationForm = ({ onBack = () => { }, onSave, editData }) => {
   };
 
   const handleDownloadPdf = () => {
-    if (!validate()) return;
+    const validationErrors = validate();
+
+    if (Object.keys(validationErrors).length > 0) return;
     downloadQuotationPdf({
       ...form,
       originPort: form.originPort,
       destinationPort: form.destinationPort,
+      currencyCode: cur,
     });
   };
 
@@ -1610,9 +1712,9 @@ const QuotationForm = ({ onBack = () => { }, onSave, editData }) => {
                   <SelectField
                     label="Status"
                     value={form.status}
-                    onChange={(v) => setField("status", v || "Draft")}
+                    onChange={(v) => setField("status", v)}
                     options={statuses}
-                    placeholder="Draft"
+                    placeholder="Select Status"
                   />
                   <TextField
                     label="Company Name"
@@ -1630,6 +1732,7 @@ const QuotationForm = ({ onBack = () => { }, onSave, editData }) => {
                     value={form.service}
                     onChange={(v) => setField("service", v)}
                     options={serviceTypes}
+                    placeholder="Select Service Type"
                     error={errors.service}
                   />
                   <SelectField
@@ -1638,6 +1741,7 @@ const QuotationForm = ({ onBack = () => { }, onSave, editData }) => {
                     value={form.incoterm}
                     onChange={(v) => setField("incoterm", v)}
                     options={incoterms}
+                    placeholder="Select Incoterm"
                     error={errors.incoterm}
                   />
                   <SelectField
@@ -1684,7 +1788,9 @@ const QuotationForm = ({ onBack = () => { }, onSave, editData }) => {
                       }
                       options={[
                         ...new Set(
-                          ports.map((p) => cityLabel(p?.city)).filter(Boolean),
+                          enquiries
+                            .map((e) => cityLabel(e.fromLocation))
+                            .filter(Boolean)
                         ),
                       ]}
                       placeholder="Search origin city"
@@ -1695,16 +1801,17 @@ const QuotationForm = ({ onBack = () => { }, onSave, editData }) => {
                       required
                       value={form.originPortId}
                       onChange={(v) => {
-                        const rec = ports.find(
-                          (p) => String(p.id) === String(v),
-                        );
+                        const port = getEnquiryPort(selectedEnquiry, true);
+
                         setForm((prev) => ({
                           ...prev,
                           originPortId: v,
-                          originPort: rec
-                            ? `${rec.portName} (${rec.portCode})`
-                            : "",
+                          originPort:
+                            port && String(port.id) === String(v)
+                              ? portLabel(port)
+                              : "",
                         }));
+
                         setErrors((prev) => ({
                           ...prev,
                           originPort: "",
@@ -1733,7 +1840,9 @@ const QuotationForm = ({ onBack = () => { }, onSave, editData }) => {
                       }
                       options={[
                         ...new Set(
-                          ports.map((p) => cityLabel(p?.city)).filter(Boolean),
+                          enquiries
+                            .map((e) => cityLabel(e.toLocation))
+                            .filter(Boolean)
                         ),
                       ]}
                       placeholder="Search destination city"
@@ -1744,16 +1853,17 @@ const QuotationForm = ({ onBack = () => { }, onSave, editData }) => {
                       required
                       value={form.destinationPortId}
                       onChange={(v) => {
-                        const rec = ports.find(
-                          (p) => String(p.id) === String(v),
-                        );
+                        const port = getEnquiryPort(selectedEnquiry, false);
+
                         setForm((prev) => ({
                           ...prev,
                           destinationPortId: v,
-                          destinationPort: rec
-                            ? `${rec.portName} (${rec.portCode})`
-                            : "",
+                          destinationPort:
+                            port && String(port.id) === String(v)
+                              ? portLabel(port)
+                              : "",
                         }));
+
                         setErrors((prev) => ({
                           ...prev,
                           destinationPort: "",
@@ -1788,9 +1898,14 @@ const QuotationForm = ({ onBack = () => { }, onSave, editData }) => {
                     />
                     <TextField
                       label="Customer Phone"
-                      maxLength={20}
+                      required
+                      maxLength={10}
                       value={form.customerPhone}
-                      onChange={(v) => setField("customerPhone", v)}
+                      onChange={(v) => {
+                        const numeric = v.replace(/[^\d+]/g, "");
+                        setField("customerPhone", numeric);
+                      }}
+                      error={errors.customerPhone}
                     />
                     <TextField
                       label="Customer Email"
@@ -1808,15 +1923,22 @@ const QuotationForm = ({ onBack = () => { }, onSave, editData }) => {
                     />
                     <TextField
                       label="Agent Name"
+                      required
                       maxLength={100}
                       value={form.agentName}
                       onChange={(v) => setField("agentName", v)}
+                      error={errors.agentName}
                     />
                     <TextField
                       label="Agent Phone"
-                      maxLength={20}
+                      required
+                      maxLength={10}
                       value={form.agentPhone}
-                      onChange={(v) => setField("agentPhone", v)}
+                      onChange={(v) => {
+                        const numeric = v.replace(/[^\d+]/g, "");
+                        setField("agentPhone", numeric);
+                      }}
+                      error={errors.agentPhone}
                     />
                     <TextField
                       label="Agent Email"
@@ -2472,16 +2594,6 @@ const QuotationForm = ({ onBack = () => { }, onSave, editData }) => {
               Back
             </button>
           )}
-
-          <button
-            type="button"
-            onClick={handleDownloadPdf}
-            disabled={submitting}
-            className="inline-flex items-center justify-center gap-1.5 rounded-md border border-blue-200 bg-blue-50 px-3 py-1.5 text-[11px] font-semibold text-blue-700 transition hover:bg-blue-100 disabled:opacity-50 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-300 dark:hover:bg-blue-500/20"
-          >
-            <Download size={13} />
-            PDF
-          </button>
 
           {step < 3 ? (
             <button

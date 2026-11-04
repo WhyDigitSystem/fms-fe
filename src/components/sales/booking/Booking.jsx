@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import BookingAPI from "../../../api/sales/bookingAPI";
 import BookingForm from "./Bookingform";
 import Bookinglist from "./Bookinglist";
@@ -14,18 +14,33 @@ const Booking = ({ onBack }) => {
   const orgId = parseInt(localStorage.getItem("orgId")) || 1000000001;
   const branchId = parseInt(localStorage.getItem("branchId")) || orgId;
 
+  // Guard against setState after unmount / double-fetch races
+  const fetchTokenRef = useRef(0);
+
   const fetchBookings = useCallback(async () => {
+    const token = ++fetchTokenRef.current;
     try {
       setLoading(true);
-      const data = await BookingAPI.getBookingByOrgId(branchId, orgId);
-      console.log("✅ Booking.jsx: Data fetched successfully", data);
-      setBookings(data);
+      const res = await BookingAPI.getBookingByOrgId(branchId, orgId);
+
+      // ✅ Handle every common response shape
+      const list =
+        res?.paramObjectsMap?.bookingVOList ||
+        res?.paramObjectsMap?.bookingList ||
+        res?.paramObjectsMap?.bookingVO ||
+        res?.data ||
+        res;
+
+      if (token !== fetchTokenRef.current) return; // stale response
+
+      setBookings(Array.isArray(list) ? list : []);
     } catch (error) {
+      if (token !== fetchTokenRef.current) return;
       console.error("❌ Booking.jsx: Failed to load bookings", error);
       setToast("Failed to load bookings.");
       setBookings([]);
     } finally {
-      setLoading(false);
+      if (token === fetchTokenRef.current) setLoading(false);
     }
   }, [branchId, orgId]);
 
@@ -33,18 +48,24 @@ const Booking = ({ onBack }) => {
     fetchBookings();
   }, [fetchBookings]);
 
-  const handleSaveSuccess = useCallback(async () => {
-    await fetchBookings();
-    setSelectedBooking(null);
-    setView("list");
-  }, [fetchBookings]);
+  // ✅ Called by BookingForm after every successful save/submit/status change.
+  //    `saved` is the hydrated form object so we can show its bookingNo.
+  const handleSaveSuccess = useCallback(
+    async (saved) => {
+      if (saved?.bookingNo) {
+        setToast(`Booking ${saved.bookingNo} saved.`);
+      }
+      await fetchBookings();
+      setSelectedBooking(null);
+      setView("list");
+    },
+    [fetchBookings],
+  );
 
   const goList = () => {
     setSelectedBooking(null);
     setView("list");
   };
-
-  console.log("🟢 Booking.jsx rendering. View:", view, "Bookings count:", bookings.length, "Loading:", loading);
 
   return (
     <div className="min-h-full bg-slate-50 dark:bg-gray-950">
@@ -54,6 +75,7 @@ const Booking = ({ onBack }) => {
           loading={loading}
           toast={toast}
           onDismissToast={() => setToast("")}
+          onReload={fetchBookings}
           onAddNew={() => {
             setToast("");
             setSelectedBooking(null);
