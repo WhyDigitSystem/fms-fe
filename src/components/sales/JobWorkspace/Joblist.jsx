@@ -10,6 +10,7 @@ import {
   Clock,
   FolderOpen,
   Plane,
+  Plus,
   Search,
   Ship,
   Truck,
@@ -22,6 +23,9 @@ const modeIcons = { Sea: Ship, Air: Plane, Road: Truck };
 
 const controlClass =
   "h-[32px] rounded-md border border-slate-300 bg-white px-2.5 text-[12px] text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:placeholder:text-gray-500 dark:focus:border-blue-500 dark:focus:ring-blue-900/40 dark:[color-scheme:dark]";
+
+const newBtnClass =
+  "inline-flex h-[32px] items-center justify-center gap-1.5 rounded-md bg-blue-600 px-3 text-[12px] font-semibold text-white shadow-sm transition hover:bg-blue-700";
 
 const headings = [
   { label: "Job No.", className: "" },
@@ -62,6 +66,7 @@ const Joblist = ({
   jobs = [],
   loading = false,
   onOpen,
+  onNew,
   onBack,
   toast,
   onDismissToast,
@@ -173,6 +178,15 @@ const Joblist = ({
               </p>
             </div>
           </div>
+
+          <button
+            type="button"
+            onClick={() => onNew?.()}
+            className={newBtnClass}
+          >
+            <Plus size={14} />
+            New Job
+          </button>
         </div>
 
         {/* Toast */}
@@ -427,6 +441,14 @@ const Joblist = ({
                         <p className="mt-1 text-[10px] text-slate-500 dark:text-gray-400">
                           Try changing your search or filters.
                         </p>
+                        <button
+                          type="button"
+                          onClick={() => onNew?.()}
+                          className={`${newBtnClass} mt-3`}
+                        >
+                          <Plus size={14} />
+                          New Job
+                        </button>
                       </div>
                     </td>
                   </tr>

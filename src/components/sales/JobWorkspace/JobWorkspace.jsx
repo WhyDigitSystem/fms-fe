@@ -29,6 +29,11 @@ import {
   X,
 } from "lucide-react";
 import {
+  BRANCHES,
+  FIELD_OPTIONS,
+  JOB_MODES,
+  JOB_TYPES,
+  MODE_LABELS,
   buildInfoSections,
   buildSteps,
   jobStatusDots,
@@ -50,6 +55,9 @@ const btnSmallOutline = `${btnSmall} border-blue-200 bg-white text-blue-700 hove
 
 const cardClass =
   "rounded-lg border border-slate-200 bg-white shadow-sm dark:border-gray-700/60 dark:bg-gray-800/40";
+
+const inputClass =
+  "h-[26px] w-full min-w-0 rounded-md border border-slate-300 bg-white px-2 text-[11px] font-medium text-slate-800 outline-none transition placeholder:font-normal placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:placeholder:text-gray-500 dark:focus:border-blue-500 dark:focus:ring-blue-900/40 dark:[color-scheme:dark]";
 
 const sectionIcons = {
   shipment: Ship,
@@ -74,22 +82,83 @@ const docStatusMeta = {
   Pending: { icon: Clock, cls: "text-slate-400 dark:text-gray-500" },
 };
 
+// Required fields when creating a new job
+const REQUIRED_FIELDS = [
+  ["customer", "Customer"],
+  ["shipper", "Shipper"],
+  ["consignee", "Consignee"],
+  ["origin", "Origin"],
+  ["destination", "Destination"],
+];
+
 /* ------------------------------------------------------------------ */
 /* Small building blocks                                               */
 /* ------------------------------------------------------------------ */
 
-const InfoItem = ({ label, value, kind }) => (
+const InputField = ({ field, kind, value, onChange, label }) => {
+  const options = FIELD_OPTIONS[field];
+  if (options) {
+    return (
+      <select
+        aria-label={label}
+        value={value ?? ""}
+        onChange={(e) => onChange(field, e.target.value)}
+        className={inputClass}
+      >
+        <option value="">Select</option>
+        {options.map((o) => (
+          <option key={o} value={o}>
+            {o}
+          </option>
+        ))}
+      </select>
+    );
+  }
+  return (
+    <input
+      aria-label={label}
+      type={kind === "date" ? "date" : kind === "number" ? "number" : "text"}
+      min={kind === "number" ? 0 : undefined}
+      step={kind === "number" ? "any" : undefined}
+      value={value ?? ""}
+      onChange={(e) => onChange(field, e.target.value)}
+      className={inputClass}
+    />
+  );
+};
+
+const InfoItem = ({
+  label,
+  value,
+  kind,
+  field,
+  editable,
+  formValue,
+  onChange,
+}) => (
   <div className="flex items-center gap-3 py-0.5 text-[11px]">
     <dt className="w-[96px] shrink-0 text-slate-500 dark:text-gray-400">
       {label}
     </dt>
-    <dd className="flex min-w-0 items-center gap-1.5 truncate font-medium text-slate-800 dark:text-gray-100">
-      {kind === "date" && (
-        <CalendarIcon size={11} className="shrink-0 text-slate-400" />
+    <dd className="flex min-w-0 flex-1 items-center gap-1.5 truncate font-medium text-slate-800 dark:text-gray-100">
+      {editable ? (
+        <InputField
+          field={field}
+          kind={kind}
+          value={formValue}
+          onChange={onChange}
+          label={label}
+        />
+      ) : (
+        <>
+          {kind === "date" && (
+            <CalendarIcon size={11} className="shrink-0 text-slate-400" />
+          )}
+          <span className="truncate" title={value}>
+            {value}
+          </span>
+        </>
       )}
-      <span className="truncate" title={value}>
-        {value}
-      </span>
     </dd>
   </div>
 );
@@ -101,6 +170,9 @@ const CollapsibleSection = ({
   columns,
   open,
   onToggle,
+  editable,
+  form,
+  onChange,
 }) => (
   <section id={`job-${id}`} className={`${cardClass} overflow-hidden`}>
     <button
@@ -132,8 +204,17 @@ const CollapsibleSection = ({
       >
         {columns.map((col, i) => (
           <dl key={i} className={i > 0 ? "sm:pl-4" : ""}>
-            {col.map(([label, value, kind]) => (
-              <InfoItem key={label} label={label} value={value} kind={kind} />
+            {col.map(([label, value, kind, field]) => (
+              <InfoItem
+                key={label}
+                label={label}
+                value={value}
+                kind={kind}
+                field={field}
+                editable={editable}
+                formValue={form?.[field]}
+                onChange={onChange}
+              />
             ))}
           </dl>
         ))}
@@ -251,7 +332,14 @@ const Modal = ({ title, onClose, children, footer }) => (
   </div>
 );
 
-const DropdownButton = ({ label, icon: Icon, items, className, onSelect }) => {
+const DropdownButton = ({
+  label,
+  icon: Icon,
+  items,
+  className,
+  onSelect,
+  disabled,
+}) => {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
 
@@ -269,6 +357,7 @@ const DropdownButton = ({ label, icon: Icon, items, className, onSelect }) => {
         type="button"
         aria-haspopup="menu"
         aria-expanded={open}
+        disabled={disabled}
         onClick={() => setOpen((o) => !o)}
         className={className}
       >
@@ -305,9 +394,12 @@ const DropdownButton = ({ label, icon: Icon, items, className, onSelect }) => {
 /* Screen                                                              */
 /* ------------------------------------------------------------------ */
 
-const JobWorkspace = ({ job, onBack, onNotify, onStatusChange }) => {
+const JobWorkspace = ({ job, onBack, onCreate, onNotify, onStatusChange }) => {
+  const isNew = !!job.isNew;
+
   const [activeTab, setActiveTab] = useState("details");
-  const [direction, setDirection] = useState(job.type || "Export");
+  const [dirDirection, setDirDirection] = useState(job.type || "Export");
+  const [form, setForm] = useState(() => (job.isNew ? { ...job } : null));
   const [copied, setCopied] = useState(false);
   const [open, setOpen] = useState({
     shipment: true,
@@ -323,8 +415,21 @@ const JobWorkspace = ({ job, onBack, onNotify, onStatusChange }) => {
   const [notice, setNotice] = useState(null);
   const genRef = useRef(null);
 
-  const steps = useMemo(() => buildSteps(job), [job]);
-  const sections = useMemo(() => buildInfoSections(job), [job]);
+  // `data` is what the screen displays: the draft form for a new job,
+  // otherwise the saved job.
+  const data = isNew ? form : job;
+
+  const direction = isNew ? form.type : dirDirection;
+
+  const setField = (field, value) => setForm((p) => ({ ...p, [field]: value }));
+
+  const setDirection = (d) => {
+    if (isNew) setField("type", d);
+    else setDirDirection(d);
+  };
+
+  const steps = useMemo(() => buildSteps(data), [data]);
+  const sections = useMemo(() => buildInfoSections(data), [data]);
   const activities = job.activities || [];
   const isClosed = job.status === "Closed";
 
@@ -405,12 +510,40 @@ const JobWorkspace = ({ job, onBack, onNotify, onStatusChange }) => {
     setNotice({ type: "success", text: `${name} generated.` });
   };
 
+  const validateNew = () => {
+    const missing = REQUIRED_FIELDS.filter(
+      ([key]) => !String(form[key] || "").trim(),
+    ).map(([, label]) => label);
+    if (missing.length > 0) {
+      setNotice({
+        type: "error",
+        text: `Please fill: ${missing.join(", ")}.`,
+      });
+      return false;
+    }
+    if (form.etd && form.eta && form.eta < form.etd) {
+      setNotice({ type: "error", text: "ETA cannot be before ETD." });
+      return false;
+    }
+    return true;
+  };
+
   const handleSave = () => {
+    if (isNew) {
+      if (!validateNew()) return;
+      onCreate?.(form);
+      return;
+    }
     setNotice({ type: "success", text: `Job ${job.jobNo} saved.` });
     onNotify?.(`Job ${job.jobNo} saved.`);
   };
 
   const handleValidate = () => {
+    if (isNew) {
+      if (validateNew())
+        setNotice({ type: "success", text: "Validation passed." });
+      return;
+    }
     const pending = documents.filter((d) => d.status === "Pending").length;
     if (pending > 0)
       setNotice({
@@ -432,7 +565,7 @@ const JobWorkspace = ({ job, onBack, onNotify, onStatusChange }) => {
     onBack?.();
   };
 
-  const status = job.status || "In Progress";
+  const status = isNew ? "In Progress" : job.status || "In Progress";
 
   return (
     <div className="min-h-screen w-full bg-slate-50 dark:bg-gray-900">
@@ -451,15 +584,16 @@ const JobWorkspace = ({ job, onBack, onNotify, onStatusChange }) => {
             <div>
               <div className="flex flex-wrap items-center gap-2">
                 <h1 className="text-base font-bold leading-tight text-slate-900 dark:text-white sm:text-lg">
-                  Unified Job Workspace
+                  {isNew ? "New Job Entry" : "Unified Job Workspace"}
                 </h1>
                 <span className="rounded-md bg-blue-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-blue-700 dark:bg-blue-500/10 dark:text-blue-300">
-                  Operations
+                  {isNew ? "New" : "Operations"}
                 </span>
               </div>
               <p className="mt-0.5 text-[10px] text-slate-500 dark:text-gray-400">
-                Track the job, manage documents and complete milestones in one
-                place.
+                {isNew
+                  ? "Fill in the job details and click Create Job. The Job No. is generated automatically."
+                  : "Track the job, manage documents and complete milestones in one place."}
               </p>
             </div>
           </div>
@@ -498,36 +632,107 @@ const JobWorkspace = ({ job, onBack, onNotify, onStatusChange }) => {
           className={`${cardClass} mb-2 grid grid-cols-2 divide-slate-100 dark:divide-gray-700/50 sm:grid-cols-3 lg:grid-cols-[1.6fr_1fr_0.8fr_1.6fr_1fr_1fr] lg:divide-x`}
         >
           <SummaryCell label="Job No.">
-            <span className="flex items-center gap-1.5">
-              <span className="truncate">{job.jobNo}</span>
-              <button
-                type="button"
-                onClick={copyJobNo}
-                aria-label="Copy job number"
-                title={copied ? "Copied" : "Copy job number"}
-                className="text-blue-600 hover:text-blue-800 dark:text-blue-400"
-              >
-                {copied ? <Check size={13} /> : <Copy size={13} />}
-              </button>
-            </span>
+            {isNew ? (
+              <span className="text-[12px] font-medium italic text-slate-400 dark:text-gray-500">
+                Auto-generated
+              </span>
+            ) : (
+              <span className="flex items-center gap-1.5">
+                <span className="truncate">{job.jobNo}</span>
+                <button
+                  type="button"
+                  onClick={copyJobNo}
+                  aria-label="Copy job number"
+                  title={copied ? "Copied" : "Copy job number"}
+                  className="text-blue-600 hover:text-blue-800 dark:text-blue-400"
+                >
+                  {copied ? <Check size={13} /> : <Copy size={13} />}
+                </button>
+              </span>
+            )}
           </SummaryCell>
+
           <SummaryCell label="Mode">
-            <span className="flex items-center gap-1.5">
-              <Ship size={15} className="text-slate-700 dark:text-gray-200" />
-              {job.modeLabel || job.mode}
-            </span>
+            {isNew ? (
+              <select
+                aria-label="Mode"
+                value={form.mode}
+                onChange={(e) => {
+                  setField("mode", e.target.value);
+                  setField("modeLabel", MODE_LABELS[e.target.value]);
+                }}
+                className={inputClass}
+              >
+                {JOB_MODES.map((m) => (
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <span className="flex items-center gap-1.5">
+                <Ship size={15} className="text-slate-700 dark:text-gray-200" />
+                {job.modeLabel || job.mode}
+              </span>
+            )}
           </SummaryCell>
+
           <SummaryCell label="Type">
-            <span className="inline-flex rounded-md bg-blue-100 px-2 py-0.5 text-[11px] font-semibold text-blue-700 dark:bg-blue-500/20 dark:text-blue-300">
-              {job.type}
-            </span>
+            {isNew ? (
+              <select
+                aria-label="Type"
+                value={form.type}
+                onChange={(e) => setField("type", e.target.value)}
+                className={inputClass}
+              >
+                {JOB_TYPES.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <span className="inline-flex rounded-md bg-blue-100 px-2 py-0.5 text-[11px] font-semibold text-blue-700 dark:bg-blue-500/20 dark:text-blue-300">
+                {job.type}
+              </span>
+            )}
           </SummaryCell>
-          <SummaryCell label="Customer">
-            <span className="block truncate" title={job.customer}>
-              {job.customer}
-            </span>
+
+          <SummaryCell label={isNew ? "Customer *" : "Customer"}>
+            {isNew ? (
+              <input
+                aria-label="Customer"
+                value={form.customer}
+                onChange={(e) => setField("customer", e.target.value)}
+                placeholder="Customer name"
+                className={inputClass}
+              />
+            ) : (
+              <span className="block truncate" title={job.customer}>
+                {job.customer}
+              </span>
+            )}
           </SummaryCell>
-          <SummaryCell label="Branch">{job.branch}</SummaryCell>
+
+          <SummaryCell label="Branch">
+            {isNew ? (
+              <select
+                aria-label="Branch"
+                value={form.branch}
+                onChange={(e) => setField("branch", e.target.value)}
+                className={inputClass}
+              >
+                {BRANCHES.map((b) => (
+                  <option key={b} value={b}>
+                    {b}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              job.branch
+            )}
+          </SummaryCell>
+
           <SummaryCell label="Status">
             <span
               className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ring-inset ${
@@ -539,7 +744,7 @@ const JobWorkspace = ({ job, onBack, onNotify, onStatusChange }) => {
                   jobStatusDots[status] || "bg-emerald-500"
                 }`}
               />
-              {status}
+              {isNew ? "Draft" : status}
             </span>
           </SummaryCell>
         </div>
@@ -598,7 +803,14 @@ const JobWorkspace = ({ job, onBack, onNotify, onStatusChange }) => {
         <div className="grid grid-cols-1 items-start gap-2 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
           {/* Left: info sections */}
           <div className="min-w-0 space-y-2">
-            <div className="flex justify-end">
+            <div className="flex items-center justify-between">
+              {isNew ? (
+                <span className="text-[10px] text-slate-500 dark:text-gray-400">
+                  * Required: Customer, Shipper, Consignee, Origin, Destination
+                </span>
+              ) : (
+                <span />
+              )}
               <button
                 type="button"
                 onClick={() => setAll(!allOpen)}
@@ -614,6 +826,9 @@ const JobWorkspace = ({ job, onBack, onNotify, onStatusChange }) => {
                 icon={sectionIcons[s.id] || Package}
                 open={open[s.id]}
                 onToggle={() => toggle(s.id)}
+                editable={isNew}
+                form={form}
+                onChange={setField}
               />
             ))}
           </div>
@@ -638,8 +853,9 @@ const JobWorkspace = ({ job, onBack, onNotify, onStatusChange }) => {
                   type="button"
                   aria-haspopup="menu"
                   aria-expanded={genMenu}
+                  disabled={isNew}
                   onClick={() => setGenMenu((o) => !o)}
-                  className="inline-flex h-7 items-center gap-1.5 rounded-md bg-blue-100 px-2.5 text-[11px] font-semibold text-blue-800 transition hover:bg-blue-200"
+                  className="inline-flex h-7 items-center gap-1.5 rounded-md bg-blue-100 px-2.5 text-[11px] font-semibold text-blue-800 transition hover:bg-blue-200 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <Sparkles size={12} />
                   Generate All
@@ -672,6 +888,12 @@ const JobWorkspace = ({ job, onBack, onNotify, onStatusChange }) => {
                 )}
               </div>
             </div>
+
+            {isNew && (
+              <p className="border-b border-slate-100 bg-slate-50 px-3 py-1.5 text-[10px] text-slate-500 dark:border-gray-700/50 dark:bg-gray-900/60 dark:text-gray-400">
+                Documents can be generated once the job is created.
+              </p>
+            )}
 
             <div className="overflow-x-auto">
               <table className="w-full min-w-[460px] text-left text-[11px]">
@@ -729,6 +951,7 @@ const JobWorkspace = ({ job, onBack, onNotify, onStatusChange }) => {
                           ) : (
                             <button
                               type="button"
+                              disabled={isNew}
                               onClick={() => generateDoc(d.id)}
                               className={`${btnSmallOutline} w-[104px]`}
                             >
@@ -881,10 +1104,17 @@ const JobWorkspace = ({ job, onBack, onNotify, onStatusChange }) => {
         {/* Footer actions */}
         <div className="sticky bottom-0 z-20 -mx-3 mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 bg-slate-50 px-3 py-2 sm:-mx-4 sm:px-4 lg:-mx-5 lg:px-5 dark:border-gray-800 dark:bg-gray-900">
           <div className="flex flex-wrap items-center gap-2">
-            <button type="button" onClick={handleSave} className={btnOutline}>
-              <Save size={12} />
-              Save
-            </button>
+            {isNew ? (
+              <button type="button" onClick={handleSave} className={btnPrimary}>
+                <Save size={12} />
+                Create Job
+              </button>
+            ) : (
+              <button type="button" onClick={handleSave} className={btnOutline}>
+                <Save size={12} />
+                Save
+              </button>
+            )}
             <button
               type="button"
               onClick={handleValidate}
@@ -893,6 +1123,12 @@ const JobWorkspace = ({ job, onBack, onNotify, onStatusChange }) => {
               <ShieldCheck size={12} />
               Validate
             </button>
+            {isNew && (
+              <button type="button" onClick={onBack} className={btnOutline}>
+                <X size={12} />
+                Cancel
+              </button>
+            )}
           </div>
 
           <div className="flex flex-wrap items-center justify-end gap-2">
@@ -900,6 +1136,7 @@ const JobWorkspace = ({ job, onBack, onNotify, onStatusChange }) => {
               label="Generate Documents"
               icon={Sparkles}
               className={btnPrimary}
+              disabled={isNew}
               items={[
                 "Shipping Instructions",
                 "House Bill of Lading",
@@ -912,13 +1149,14 @@ const JobWorkspace = ({ job, onBack, onNotify, onStatusChange }) => {
               label="Print Pack"
               icon={Printer}
               className={btnOutline}
+              disabled={isNew}
               items={["Export pack", "Customs pack", "All documents"]}
               onSelect={() => window.print()}
             />
             <button
               type="button"
               onClick={() => setModal({ kind: "hold" })}
-              disabled={isClosed || status === "On Hold"}
+              disabled={isNew || isClosed || status === "On Hold"}
               className={btnOutline}
             >
               <Pause size={12} />
@@ -927,7 +1165,7 @@ const JobWorkspace = ({ job, onBack, onNotify, onStatusChange }) => {
             <button
               type="button"
               onClick={() => setModal({ kind: "close" })}
-              disabled={isClosed}
+              disabled={isNew || isClosed}
               className={btnDark}
             >
               <Flag size={12} />

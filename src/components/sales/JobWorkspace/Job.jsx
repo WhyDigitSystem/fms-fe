@@ -1,7 +1,7 @@
 import { useCallback, useState } from "react";
 import JobWorkspace from "./JobWorkspace";
 import Joblist from "./Joblist";
-import { initialJobs } from "./Jobdata";
+import { emptyJob, finalizeNewJob, initialJobs } from "./Jobdata";
 
 // Frontend-only container. Swap `initialJobs` / the handlers for API calls later.
 const Job = ({ onBack }) => {
@@ -14,6 +14,23 @@ const Job = ({ onBack }) => {
     setSelectedJob(null);
     setView("list");
   }, []);
+
+  const handleNew = useCallback(() => {
+    setToast("");
+    setSelectedJob(emptyJob());
+    setView("workspace");
+  }, []);
+
+  const handleCreate = useCallback(
+    (form) => {
+      const created = finalizeNewJob(form, jobs);
+      setJobs((prev) => [created, ...prev]);
+      setToast(`Job ${created.jobNo} created.`);
+      setSelectedJob(null);
+      setView("list");
+    },
+    [jobs],
+  );
 
   const handleStatusChange = useCallback((id, status) => {
     setJobs((prev) => prev.map((j) => (j.id === id ? { ...j, status } : j)));
@@ -30,6 +47,7 @@ const Job = ({ onBack }) => {
           jobs={jobs}
           toast={toast}
           onDismissToast={() => setToast("")}
+          onNew={handleNew}
           onOpen={(job) => {
             setToast("");
             setSelectedJob(job);
@@ -39,9 +57,10 @@ const Job = ({ onBack }) => {
         />
       ) : (
         <JobWorkspace
-          key={selectedJob?.id}
+          key={selectedJob?.id ?? "new"}
           job={selectedJob}
           onBack={goList}
+          onCreate={handleCreate}
           onNotify={setToast}
           onStatusChange={handleStatusChange}
         />

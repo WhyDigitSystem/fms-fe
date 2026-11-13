@@ -9,6 +9,29 @@ export const fmtNum = (n, d = 2) =>
     maximumFractionDigits: d,
   });
 
+const MONTHS = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+];
+
+// "2026-11-05" -> "05-Nov-2026"
+export const fmtDate = (iso) => {
+  if (!iso) return "";
+  const [y, m, d] = String(iso).split("-");
+  if (!y || !m || !d) return iso;
+  return `${d}-${MONTHS[Number(m) - 1]}-${y}`;
+};
+
 /* ------------------------------------------------------------------ */
 /* Configuration                                                       */
 /* ------------------------------------------------------------------ */
@@ -23,6 +46,25 @@ export const CURRENT_USER = {
 export const JOB_MODES = ["Sea", "Air", "Road"];
 export const JOB_TYPES = ["Export", "Import"];
 export const JOB_STATUSES = ["In Progress", "On Hold", "Closed"];
+
+export const MODE_LABELS = {
+  Sea: "Sea Freight",
+  Air: "Air Freight",
+  Road: "Road Transport",
+};
+
+export const BRANCHES = [
+  "DEL – Delhi",
+  "BLR – Bengaluru",
+  "MAA – Chennai",
+  "SGP – Singapore",
+];
+
+// Dropdown options for fields in the info sections
+export const FIELD_OPTIONS = {
+  freightTerm: ["CIF", "FOB", "EXW", "Prepaid", "Collect"],
+  currency: ["USD", "EUR", "INR", "SGD", "GBP"],
+};
 
 export const jobStatusStyles = {
   "In Progress":
@@ -69,6 +111,7 @@ export const buildSteps = (job) =>
 
 /* ------------------------------------------------------------------ */
 /* Info sections (icons are attached in the screen)                    */
+/* Each row: [label, displayValue, kind, fieldKey]                     */
 /* ------------------------------------------------------------------ */
 
 export const buildInfoSections = (j) => [
@@ -77,14 +120,14 @@ export const buildInfoSections = (j) => [
     title: "1. Shipment & Parties",
     columns: [
       [
-        ["Shipper", j.shipper || "-"],
-        ["Consignee", j.consignee || "-"],
-        ["Notify Party", j.notifyParty || "-"],
+        ["Shipper", j.shipper || "-", "text", "shipper"],
+        ["Consignee", j.consignee || "-", "text", "consignee"],
+        ["Notify Party", j.notifyParty || "-", "text", "notifyParty"],
       ],
       [
-        ["Customer Reference", j.customerRef || "-"],
-        ["Sales Person", j.salesPerson || "-"],
-        ["Agent", j.agent || "-"],
+        ["Customer Reference", j.customerRef || "-", "text", "customerRef"],
+        ["Sales Person", j.salesPerson || "-", "text", "salesPerson"],
+        ["Agent", j.agent || "-", "text", "agent"],
       ],
     ],
   },
@@ -93,16 +136,16 @@ export const buildInfoSections = (j) => [
     title: "2. Routing & Schedule",
     columns: [
       [
-        ["Origin", j.origin || "-"],
-        ["POL", j.pol || "-"],
+        ["Origin", j.origin || "-", "text", "origin"],
+        ["POL", j.pol || "-", "text", "pol"],
       ],
       [
-        ["Destination", j.destination || "-"],
-        ["POD", j.pod || "-"],
+        ["Destination", j.destination || "-", "text", "destination"],
+        ["POD", j.pod || "-", "text", "pod"],
       ],
       [
-        ["ETD", j.etd || "-", "date"],
-        ["ETA", j.eta || "-", "date"],
+        ["ETD", j.etd || "-", "date", "etd"],
+        ["ETA", j.eta || "-", "date", "eta"],
       ],
     ],
   },
@@ -111,17 +154,24 @@ export const buildInfoSections = (j) => [
     title: "3. Cargo & Containers",
     columns: [
       [
-        ["Commodity", j.commodity || "-"],
-        ["Packages", j.packages || "-"],
+        ["Commodity", j.commodity || "-", "text", "commodity"],
+        ["Packages", j.packages || "-", "number", "packages"],
       ],
       [
         [
           "Gross Weight",
           j.grossWeight ? `${fmtNum(j.grossWeight, 3)} KG` : "-",
+          "number",
+          "grossWeight",
         ],
-        ["Volume", j.volume ? `${fmtNum(j.volume, 3)} CBM` : "-"],
+        [
+          "Volume",
+          j.volume ? `${fmtNum(j.volume, 3)} CBM` : "-",
+          "number",
+          "volume",
+        ],
       ],
-      [["Containers", j.containers || "-", "container"]],
+      [["Containers", j.containers || "-", "text", "containers"]],
     ],
   },
   {
@@ -129,12 +179,12 @@ export const buildInfoSections = (j) => [
     title: "4. Commercial & References",
     columns: [
       [
-        ["Freight Term", j.freightTerm || "-"],
-        ["Payment Term", j.paymentTerm || "-"],
+        ["Freight Term", j.freightTerm || "-", "text", "freightTerm"],
+        ["Payment Term", j.paymentTerm || "-", "text", "paymentTerm"],
       ],
       [
-        ["Quotation No.", j.quotationNo || "-"],
-        ["Invoice Currency", j.currency || "-"],
+        ["Quotation No.", j.quotationNo || "-", "text", "quotationNo"],
+        ["Invoice Currency", j.currency || "-", "text", "currency"],
       ],
     ],
   },
@@ -189,6 +239,106 @@ export const defaultTasks = () => [
   { id: uid(), title: "Submit Shipping Instructions", due: "06-Nov-2026" },
   { id: uid(), title: "Confirm Cargo Receipt", due: "07-Nov-2026" },
 ];
+
+/* ------------------------------------------------------------------ */
+/* New job helpers                                                     */
+/* ------------------------------------------------------------------ */
+
+// Blank record used by the "New Job" entry form.
+export const emptyJob = () => ({
+  isNew: true,
+  jobNo: "",
+  jobDate: "",
+  mode: "Sea",
+  modeLabel: MODE_LABELS.Sea,
+  type: "Export",
+  customer: "",
+  branch:
+    BRANCHES.find((b) => b.startsWith(CURRENT_USER.branch)) || BRANCHES[0],
+  status: "In Progress",
+  stepIndex: 0,
+  stepDates: [],
+  shipper: "",
+  consignee: "",
+  notifyParty: "",
+  customerRef: "",
+  salesPerson: "",
+  agent: "",
+  origin: "",
+  pol: "",
+  destination: "",
+  pod: "",
+  etd: "", // ISO yyyy-mm-dd while editing
+  eta: "",
+  commodity: "",
+  packages: "",
+  grossWeight: "",
+  volume: "",
+  containers: "",
+  freightTerm: "",
+  paymentTerm: "",
+  quotationNo: "",
+  currency: "",
+  documents: defaultDocuments().map((d) => ({ ...d, status: "Pending" })),
+  activities: [],
+  tasks: [],
+});
+
+const MODE_CODES = { Sea: "SEA", Air: "AIR", Road: "ROD" };
+
+// e.g. DEL/EXP/SEA/2026/00126
+export const generateJobNo = (jobs, f) => {
+  const branchCode = (f.branch || "").split(" ")[0] || "HQ";
+  const typeCode = f.type === "Import" ? "IMP" : "EXP";
+  const year = new Date().getFullYear();
+  const prefix = `${branchCode}/${typeCode}/${MODE_CODES[f.mode] || "SEA"}/${year}/`;
+  const seq =
+    jobs.reduce((max, j) => {
+      if (!j.jobNo?.startsWith(prefix)) return max;
+      return Math.max(max, Number(j.jobNo.slice(prefix.length)) || 0);
+    }, 0) + 1;
+  return `${prefix}${String(seq).padStart(5, "0")}`;
+};
+
+// Turns the entry form into a full job record ready for the list.
+export const finalizeNewJob = (f, jobs) => {
+  const now = new Date();
+  const today = fmtDate(
+    `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(
+      now.getDate(),
+    ).padStart(2, "0")}`,
+  );
+  const time = `${String(now.getHours()).padStart(2, "0")}:${String(
+    now.getMinutes(),
+  ).padStart(2, "0")}`;
+  const jobNo = generateJobNo(jobs, f);
+
+  return {
+    ...f,
+    id: Date.now(),
+    isNew: false,
+    jobNo,
+    jobDate: today,
+    modeLabel: MODE_LABELS[f.mode] || f.mode,
+    status: "In Progress",
+    stepIndex: 1,
+    stepDates: [today, today],
+    etd: fmtDate(f.etd),
+    eta: fmtDate(f.eta),
+    grossWeight: Number(f.grossWeight) || 0,
+    volume: Number(f.volume) || 0,
+    activities: [
+      {
+        id: uid(),
+        at: `${today} ${time}`,
+        by: CURRENT_USER.name,
+        text: `Job opened successfully. Job No. ${jobNo}`,
+        tone: "current",
+      },
+    ],
+    tasks: [{ id: uid(), title: "Submit Shipping Instructions", due: today }],
+  };
+};
 
 /* ------------------------------------------------------------------ */
 /* Sample data                                                         */
