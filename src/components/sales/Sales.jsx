@@ -4,6 +4,7 @@ import {
   ClipboardList,
   CalendarCheck,
   ShoppingCart,
+  Briefcase,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { hasScreenAccess } from "../../utils/accessControl";
@@ -30,6 +31,13 @@ const SALES = [
     color: "purple",
     screenCode: "BOOKING",
   },
+  {
+    name: "Job Workspace",
+    icon: Briefcase,
+    path: "/job-workspace",
+    color: "orange",
+    screenCode: "JOB_WORKSPACE",
+  },
 ];
 
 // Static Tailwind classes for reliable production builds.
@@ -55,6 +63,13 @@ const getColorStyles = (color) => {
       text: "text-purple-600 dark:text-purple-400",
       iconBg:
         "bg-purple-100 dark:bg-purple-900/40 group-hover:bg-purple-200 dark:group-hover:bg-purple-800",
+    },
+    orange: {
+      hover: "hover:bg-orange-50 dark:hover:bg-orange-900/30",
+      border: "hover:border-orange-300 dark:hover:border-orange-600",
+      text: "text-orange-600 dark:text-orange-400",
+      iconBg:
+        "bg-orange-100 dark:bg-orange-900/40 group-hover:bg-orange-200 dark:group-hover:bg-orange-800",
     },
   };
 

@@ -2,6 +2,8 @@ import Sales from "../components/sales/Sales";
 import Enquiry from "../components/sales/Enquiry/Enquiry";
 import Quotation from "../components/sales/quotation/Quotation";
 import Booking from "../components/sales/booking/Booking";
+import JobWorkspace from "../components/sales/JobWorkspace/JobWorkspace";
+import Job from "../components/sales/JobWorkspace/Job";
 
 const salesRoutes = [
   {
@@ -19,6 +21,10 @@ const salesRoutes = [
   {
     path: "booking",
     element: <Booking />,
+  },
+  {
+    path: "job-workspace",
+    element: <Job />,
   },
 ];
 
