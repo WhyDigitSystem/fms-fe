@@ -181,7 +181,18 @@ const EnquiryList = ({
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
-  const rows = useMemo(() => enquiries.map(toRow), [enquiries]);
+  const rows = useMemo(() => {
+    return enquiries
+      .map(toRow)
+      .sort((a, b) => {
+        // Latest enquiry date first
+        const dateA = new Date(a.enquiryDateRaw || 0).getTime();
+        const dateB = new Date(b.enquiryDateRaw || 0).getTime();
+
+        // If dates are the same, latest ID first
+        return dateB - dateA || Number(b.id || 0) - Number(a.id || 0);
+      });
+  }, [enquiries]);
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();

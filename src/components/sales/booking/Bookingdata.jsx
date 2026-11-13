@@ -706,227 +706,303 @@ const hsOk = (v) => {
   return /^\d+$/.test(d) && [4, 6, 8, 10].includes(d.length);
 };
 
-export const validateBooking = (f, action = "draft") => {
+
+export const validateBooking = (f, action = "draft", ports = []) => {
   const list = [];
-  const add = (key, message, section) => list.push({ key, message, section });
+  const add = (key, message, section) =>
+    list.push({ key, message, section });
+
   const submit = action === "submit";
 
   const svc = getService(f.mode, f.serviceType);
   const cust = customers.find((c) => c.id === f.customer);
+
   const hasReefer =
     f.cargoLines.some((l) => l.reefer === "Yes") || !!svc?.reefer;
+
   const door = f.pickupRequired || f.deliveryRequired;
 
   /* ---- Always (Save Draft and Submit) ---- */
-  if (!f.bookingDate) add("bookingDate", "Booking date is required", "details");
-  if (!f.branch) add("branch", "Branch is required", "details");
-  if (!f.bookingType) add("bookingType", "Booking type is required", "details");
-  if (!f.mode) add("mode", "Transport mode is required", "details");
-  if (!f.customer) add("customer", "Customer is required", "details");
-  else if (cust && (!cust.active || !cust.branches.includes(f.branch)))
+
+  if (!f.bookingDate)
+    add("bookingDate", "Booking date is required", "details");
+
+  if (!f.branch)
+    add("branch", "Branch is required", "details");
+
+  if (!f.bookingType)
+    add("bookingType", "Booking type is required", "details");
+
+  if (!f.mode)
+    add("mode", "Transport mode is required", "details");
+
+  if (!f.customer) {
+    add("customer", "Customer is required", "details");
+  } else if (cust && (!cust.active || !cust.branches.includes(f.branch))) {
     add(
       "customer",
       "Customer is inactive or not authorised for this branch",
-      "details",
+      "details"
     );
+  }
 
-  if (f.etd && f.eta && f.eta < f.etd)
-    add("eta", "ETA must not be earlier than ETD", "routing");
   if (f.email && !EMAIL_RE.test(f.email.trim()))
     add("email", "Enter a valid email address", "parties");
+
   if (f.phone && !PHONE_RE.test(f.phone.trim()))
     add("phone", "Enter a valid phone number", "parties");
 
   if (
-    badNum(f.equipment.containerQty) ||
-    (f.equipment.containerQty !== "" && num(f.equipment.containerQty) <= 0)
-  )
-    add(
-      "equipment.containerQty",
-      "Container quantity must be greater than zero",
-      "equipment",
-    );
-  if (
     f.equipment.reeferTemp !== "" &&
     !Number.isFinite(Number(f.equipment.reeferTemp))
-  )
-    add("equipment.reeferTemp", "Enter a valid temperature", "equipment");
-  if (badNum(f.commercial.sellRate))
+  ) {
+    add(
+      "equipment.reeferTemp",
+      "Enter a valid temperature",
+      "equipment"
+    );
+  }
+
+  if (badNum(f.commercial.sellRate)) {
     add(
       "commercial.sellRate",
       "Sell rate must be a valid amount",
-      "commercial",
+      "commercial"
     );
-  if (badNum(f.commercial.buyRate))
-    add("commercial.buyRate", "Buy rate must be a valid amount", "commercial");
+  }
+
+  if (badNum(f.commercial.buyRate)) {
+    add(
+      "commercial.buyRate",
+      "Buy rate must be a valid amount",
+      "commercial"
+    );
+  }
+
   if (
-    (f.commercial.sellRate !== "" || f.commercial.buyRate !== "") &&
+    (f.commercial.sellRate !== "" ||
+      f.commercial.buyRate !== "") &&
     !f.commercial.currency
-  )
+  ) {
     add(
       "commercial.currency",
       "Currency is required when a rate is entered",
-      "commercial",
+      "commercial"
     );
+  }
 
   f.cargoLines.forEach((l, i) => {
     const n = i + 1;
     const k = (field) => `line.${l.id}.${field}`;
-    if (l.commodity && !l.commodity.trim())
+
+    if (l.commodity && !l.commodity.trim()) {
       add(
         k("commodity"),
         `Cargo line ${n}: commodity cannot be blank`,
-        "cargo",
+        "cargo"
       );
+    }
+
     ["qty", "weight", "volume", "length", "width", "height"].forEach(
       (field) => {
-        if (badNum(l[field]))
+        if (badNum(l[field])) {
           add(
             k(field),
-            `Cargo line ${n}: enter a valid ${field === "qty" ? "quantity" : field}`,
-            "cargo",
+            `Cargo line ${n}: enter a valid ${field === "qty" ? "quantity" : field
+            }`,
+            "cargo"
           );
-      },
+        }
+      }
     );
-    if (l.qty !== "" && !badNum(l.qty) && !Number.isInteger(Number(l.qty)))
+
+    if (
+      l.qty !== "" &&
+      !badNum(l.qty) &&
+      !Number.isInteger(Number(l.qty))
+    ) {
       add(
         k("qty"),
         `Cargo line ${n}: quantity must be a whole number`,
-        "cargo",
+        "cargo"
       );
-    if (l.hsCode && !hsOk(l.hsCode))
+    }
+
+    if (l.hsCode && !hsOk(l.hsCode)) {
       add(
         k("hsCode"),
         `Cargo line ${n}: HS code must be 4, 6, 8 or 10 digits`,
-        "cargo",
+        "cargo"
       );
+    }
   });
 
+  // Stop here for Save Draft
   if (!submit) return finish(list);
 
   /* ---- Submit Booking (full validation) ---- */
-  if (!f.serviceType) add("serviceType", "Service type is required", "details");
-  if (POLICY.requireSalespersonOnSubmit && !f.salesperson)
-    add("salesperson", "Salesperson is required", "details");
 
-  const origin = locationByCode(f.origin);
-  const dest = locationByCode(f.destination);
-  if (!f.origin) add("origin", "Origin is required", "routing");
-  else if (!origin?.modes.includes(f.mode))
-    add("origin", `Origin must be valid for ${f.mode} freight`, "routing");
-  if (!f.destination) add("destination", "Destination is required", "routing");
-  else if (!dest?.modes.includes(f.mode))
+  if (!f.serviceType)
+    add("serviceType", "Service type is required", "details");
+
+  if (POLICY.requireSalespersonOnSubmit && !f.salesperson) {
+    add("salesperson", "Salesperson is required", "details");
+  }
+
+  // Origin and Destination validation removed.
+
+  if (f.pickupRequired && !f.placeOfReceipt) {
     add(
-      "destination",
-      `Destination must be valid for ${f.mode} freight`,
-      "routing",
+      "placeOfReceipt",
+      "Place of receipt is required for pickup",
+      "routing"
     );
-  if (f.origin && f.origin === f.destination)
-    add("destination", "Origin and destination cannot be the same", "routing");
-  if (f.pickupRequired && !f.placeOfReceipt)
-    add("placeOfReceipt", "Place of receipt is required for pickup", "routing");
-  if (f.deliveryRequired && !f.placeOfDelivery)
+  }
+
+  if (f.deliveryRequired && !f.placeOfDelivery) {
     add(
       "placeOfDelivery",
       "Place of delivery is required for delivery",
-      "routing",
+      "routing"
     );
-  if (POLICY.requireEtdOnSubmit && !f.etd)
-    add("etd", "Requested ETD is required", "routing");
-  if (POLICY.requireIncotermOnSubmit && !f.incoterm)
-    add("incoterm", "Incoterm is required", "routing");
-  if (f.incoterm && !f.incotermPlace.trim())
-    add("incotermPlace", "Named place is required for the Incoterm", "routing");
+  }
 
-  if (!f.shipper) add("shipper", "Shipper is required", "parties");
-  if (!f.consignee) add("consignee", "Consignee is required", "parties");
-  if (!f.billingCustomer)
-    add("billingCustomer", "Billing customer is required", "parties");
-  if (f.pickupRequired && !f.pickupAddress)
+  if (POLICY.requireEtdOnSubmit && !f.etd) {
+    add("etd", "Requested ETD is required", "routing");
+  }
+
+  if (POLICY.requireIncotermOnSubmit && !f.incoterm) {
+    add("incoterm", "Incoterm is required", "routing");
+  }
+
+  if (!f.shipper)
+    add("shipper", "Shipper is required", "parties");
+
+  if (!f.consignee)
+    add("consignee", "Consignee is required", "parties");
+
+  if (!f.billingCustomer) {
+    add(
+      "billingCustomer",
+      "Billing customer is required",
+      "parties"
+    );
+  }
+
+  if (f.pickupRequired && !f.pickupAddress) {
     add("pickupAddress", "Pickup address is required", "parties");
-  if (f.deliveryRequired && !f.deliveryAddress)
+  }
+
+  if (f.deliveryRequired && !f.deliveryAddress) {
     add("deliveryAddress", "Delivery address is required", "parties");
-  if (POLICY.requireContactForDoorService && door && !f.contactPerson.trim())
+  }
+
+  if (
+    POLICY.requireContactForDoorService &&
+    door &&
+    !f.contactPerson.trim()
+  ) {
     add(
       "contactPerson",
       "Contact person is required for pickup / delivery",
-      "parties",
+      "parties"
     );
+  }
 
-  if (!f.cargoLines.length)
+  if (!f.cargoLines.length) {
     add("cargoLines", "Add at least one cargo line", "cargo");
+  }
+
   f.cargoLines.forEach((l, i) => {
     const n = i + 1;
     const k = (field) => `line.${l.id}.${field}`;
-    if (!l.commodity.trim())
+
+    if (!l.commodity.trim()) {
       add(
         k("commodity"),
         `Cargo line ${n}: commodity description is required`,
-        "cargo",
+        "cargo"
       );
-    if (!l.pkgType)
-      add(k("pkgType"), `Cargo line ${n}: package type is required`, "cargo");
-    if (!(num(l.qty) > 0))
+    }
+
+    if (!l.pkgType) {
+      add(
+        k("pkgType"),
+        `Cargo line ${n}: package type is required`,
+        "cargo"
+      );
+    }
+
+    if (!(num(l.qty) > 0)) {
       add(
         k("qty"),
         `Cargo line ${n}: package quantity must be greater than zero`,
-        "cargo",
+        "cargo"
       );
-    if (!(num(l.weight) > 0))
+    }
+
+    if (!(num(l.weight) > 0)) {
       add(
         k("weight"),
         `Cargo line ${n}: gross weight must be greater than zero`,
-        "cargo",
+        "cargo"
       );
-    if (svc?.needsVolume && !(effectiveVolume(l) > 0))
+    }
+
+    if (svc?.needsVolume && !(effectiveVolume(l) > 0)) {
       add(
         k("volume"),
         `Cargo line ${n}: volume (or dimensions) is required for ${f.serviceType}`,
-        "cargo",
+        "cargo"
       );
+    }
   });
 
   if (svc?.equipment) {
-    if (!f.equipment.loadType)
-      add("equipment.loadType", "Load type is required", "equipment");
-    if (f.equipment.loadType === "FCL" || svc.loadType === "FCL") {
-      if (!f.equipment.containerType)
-        add(
-          "equipment.containerType",
-          "Container type is required for FCL",
-          "equipment",
-        );
-      if (!(num(f.equipment.containerQty) > 0))
-        add(
-          "equipment.containerQty",
-          "Container quantity is required for FCL",
-          "equipment",
-        );
+    if (!f.equipment.loadType) {
+      add(
+        "equipment.loadType",
+        "Load type is required",
+        "equipment"
+      );
     }
   }
-  if (hasReefer && f.equipment.reeferTemp === "")
+
+  if (hasReefer && f.equipment.reeferTemp === "") {
     add(
       "equipment.reeferTemp",
       "Reefer temperature is required for reefer cargo",
-      "equipment",
+      "equipment"
     );
+  }
 
-  if (POLICY.requireFreightTermsOnSubmit && !f.commercial.freightTerms)
+  if (POLICY.requireFreightTermsOnSubmit && !f.commercial.freightTerms) {
     add(
       "commercial.freightTerms",
       "Freight payment terms are required",
-      "commercial",
+      "commercial"
     );
-  if (POLICY.requireRatesOnSubmit && !(num(f.commercial.sellRate) > 0))
-    add("commercial.sellRate", "Sell rate is required", "commercial");
-  if (POLICY.blockOnCreditHold && cust?.credit === "On Hold")
+  }
+
+  if (POLICY.requireRatesOnSubmit && !(num(f.commercial.sellRate) > 0)) {
+    add(
+      "commercial.sellRate",
+      "Sell rate is required",
+      "commercial"
+    );
+  }
+
+  if (POLICY.blockOnCreditHold && cust?.credit === "On Hold") {
     add(
       "credit",
       "Customer credit is On Hold - submission is blocked",
-      "commercial",
+      "commercial"
     );
+  }
+
   return finish(list);
 };
+
 
 const finish = (list) => ({
   list,

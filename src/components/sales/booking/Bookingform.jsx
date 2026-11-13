@@ -64,7 +64,6 @@ import {
   statusStyles,
   today,
   uid,
-  users,
   validateBooking,
 } from "./bookingData";
 import BookingAPI from "../../../api/sales/bookingAPI";
@@ -167,6 +166,24 @@ const plainId = (v) => {
   return "";
 };
 
+const portId = (p) => {
+  if (p == null || p === "") return "";
+  if (typeof p === "string" || typeof p === "number") return String(p);
+  if (typeof p === "object" && p.id != null) return String(p.id);
+  return "";
+};
+
+const portLabel = (p) => {
+  if (p == null || p === "") return "";
+  if (typeof p === "string" || typeof p === "number") return String(p);
+  if (typeof p === "object") {
+    const name = p.portName || "";
+    const code = p.portCode ? ` (${p.portCode})` : "";
+    return `${name}${code}`.trim();
+  }
+  return "";
+};
+
 /* ------------------------------------------------------------------ */
 /* Small building blocks                                               */
 /* ------------------------------------------------------------------ */
@@ -249,13 +266,12 @@ const TextField = ({
   </Field>
 );
 
-/* ✅ Custom DatePickerField that visually shows dd-mm-yyyy */
 const DatePickerField = ({
   label,
   required,
   error,
   onChange,
-  value, // display format dd-mm-yyyy
+  value,
   disabled,
   className = "",
 }) => {
@@ -362,6 +378,7 @@ const SearchableSelectField = ({
   placeholder = "Search...",
   disabled,
   className = "",
+  fallbackLabel = "",
 }) => {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
@@ -374,9 +391,9 @@ const SearchableSelectField = ({
       const val = typeof opt === "string" ? opt : opt.value;
       return String(val) === String(value);
     });
-    if (!found) return "";
-    return typeof found === "string" ? found : found.label;
-  }, [options, value]);
+    if (found) return typeof found === "string" ? found : found.label;
+    return fallbackLabel || "";
+  }, [options, value, fallbackLabel]);
 
   const filtered = useMemo(() => {
     const t = q.trim().toLowerCase();
@@ -451,8 +468,7 @@ const SearchableSelectField = ({
               e.currentTarget.blur();
             }
           }}
-          className={`${inputClass} pr-14 ${error ? "!border-red-500" : ""
-            }`}
+          className={`${inputClass} pr-14 ${error ? "!border-red-500" : ""}`}
         />
         {value && !disabled && (
           <button
@@ -502,8 +518,8 @@ const SearchableSelectField = ({
                         setOpen(false);
                       }}
                       className={`flex w-full items-center justify-between gap-2 px-2.5 py-1.5 text-left hover:bg-blue-50 dark:hover:bg-blue-500/10 ${String(val) === String(value)
-                          ? "bg-blue-50/60 font-semibold text-blue-700 dark:bg-blue-500/10 dark:text-blue-300"
-                          : "text-slate-700 dark:text-gray-200"
+                        ? "bg-blue-50/60 font-semibold text-blue-700 dark:bg-blue-500/10 dark:text-blue-300"
+                        : "text-slate-700 dark:text-gray-200"
                         }`}
                     >
                       <span className="truncate">{lbl}</span>
@@ -612,14 +628,14 @@ const ModeButton = ({ value, hint, icon: Icon, selected, onClick }) => (
     onClick={() => onClick(value)}
     aria-pressed={selected}
     className={`relative flex items-center gap-2 rounded-lg border px-3 py-2 text-left transition disabled:cursor-not-allowed disabled:opacity-60 ${selected
-        ? "border-blue-500 bg-blue-50 ring-1 ring-blue-500/40 dark:bg-blue-500/10"
-        : "border-slate-300 bg-white hover:border-slate-400 dark:border-gray-700 dark:bg-gray-900 dark:hover:border-gray-600"
+      ? "border-blue-500 bg-blue-50 ring-1 ring-blue-500/40 dark:bg-blue-500/10"
+      : "border-slate-300 bg-white hover:border-slate-400 dark:border-gray-700 dark:bg-gray-900 dark:hover:border-gray-600"
       }`}
   >
     <span
       className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md ${selected
-          ? "bg-blue-600 text-white"
-          : "bg-slate-100 text-slate-500 dark:bg-gray-800 dark:text-gray-400"
+        ? "bg-blue-600 text-white"
+        : "bg-slate-100 text-slate-500 dark:bg-gray-800 dark:text-gray-400"
         }`}
     >
       <Icon size={14} />
@@ -627,8 +643,8 @@ const ModeButton = ({ value, hint, icon: Icon, selected, onClick }) => (
     <span className="min-w-0">
       <span
         className={`block text-[12px] font-semibold ${selected
-            ? "text-blue-700 dark:text-blue-300"
-            : "text-slate-700 dark:text-gray-200"
+          ? "text-blue-700 dark:text-blue-300"
+          : "text-slate-700 dark:text-gray-200"
           }`}
       >
         {value}
@@ -738,8 +754,8 @@ const ActionModal = ({ config, busy, onClose, onSubmit }) => {
             onClick={submit}
             disabled={busy}
             className={`${btnBase} text-white ${config.danger
-                ? "bg-red-600 hover:bg-red-700"
-                : "bg-blue-600 hover:bg-blue-700"
+              ? "bg-red-600 hover:bg-red-700"
+              : "bg-blue-600 hover:bg-blue-700"
               }`}
           >
             {busy ? "Saving..." : config.confirmLabel}
@@ -962,6 +978,21 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
       }));
   }, [ports, form.mode]);
 
+  // ✅ Ensure the currently-selected port is always visible in the dropdown
+  const withSelectedPort = (options, value, label) =>
+    value && !options.some((o) => String(o.value) === String(value))
+      ? [{ value: String(value), label: label || String(value) }, ...options]
+      : options;
+
+  const originOptions = useMemo(
+    () => withSelectedPort(portOptions, form.origin, form.originLabel),
+    [portOptions, form.origin, form.originLabel],
+  );
+  const destinationOptions = useMemo(
+    () => withSelectedPort(portOptions, form.destination, form.destinationLabel),
+    [portOptions, form.destination, form.destinationLabel],
+  );
+
   const portLabels = {
     Sea: ["Origin (Port / ICD)", "Destination (Port / ICD)"],
     Air: ["Origin (Airport)", "Destination (Airport)"],
@@ -1021,7 +1052,7 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
       try {
         const [currData, portData] = await Promise.all([
           currencyAPI.getAllCurrencies(orgId),
-          EnquiryAPI.getPortByOrgIdAndBranch(orgId, branchId)
+          EnquiryAPI.getPortByOrgIdAndBranch(orgId, branchId),
         ]);
         setCurrencyList(Array.isArray(currData) ? currData : []);
         setPorts(Array.isArray(portData) ? portData : []);
@@ -1076,6 +1107,19 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
         const equipment = record.equipmentDetails?.[0] || {};
         const instruction = record.instructionDetails?.[0] || {};
 
+        // ✅ API returns origin/destination as objects (or ids); resolve both id + label
+        const originPortObj = routing.origin ?? routing.originPort;
+        const destinationPortObj =
+          routing.destination ?? routing.destinationPort;
+
+        // ✅ API returns customer as a name string; try to match to a known customer
+        const custName = record.customer || "";
+        const matchedCustomer = customers.find(
+          (c) =>
+            String(c.name || "").trim().toLowerCase() ===
+            custName.trim().toLowerCase(),
+        );
+
         const cargoLines = (record.cargoDetails || []).map((c) => ({
           id: uid(),
           commodity: c.commodityDescription || "",
@@ -1096,14 +1140,18 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
           remarks: c.remarks || "",
         }));
 
+        // ✅ Preserve server-side fields so we can echo them back on save
         const existingFiles = (record.instructionDetails || [])
           .filter((d) => d.document)
           .map((d) => ({
-            id: uid(),
+            id: uid(),                                    // local UI id
+            serverId: d.id,                               // ✅ server id
+            serverFileName: d.fileName,                   // ✅ server file name
             name: d.originalName || d.fileName || "Document",
+            originalName: d.originalName || d.fileName || "Document",
             size: d.fileSize || 0,
             category: d.documentType || DOC_CATEGORIES[0],
-            url: d.document,
+            url: d.document,                              // ✅ URL to resend
             file: null,
             isExisting: true,
             uploadedOn: d.uploadOn || null,
@@ -1117,12 +1165,15 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
           branch: record.branch?.branchCode || CURRENT_USER.branch,
           status: record.bookingStatus || "Draft",
           bookingType: record.bookingType || "Export",
-          bookingSource: record.bookingSource || "Direct",
+          bookingSource: record.type,
           quotationNo: record.quotationNo || "",
           quotationDate: isoToDisplay(record.quotationDate || ""),
           mode: record.transportMode || "Sea",
           serviceType: record.serviceType || "",
-          customer: record.customer || "",
+
+          // ✅ customer: keep both the id (if matched) and the display name
+          customer: matchedCustomer?.id || custName,
+          customerDisplayName: custName,
           customerRef: record.customerReference || "",
           salesperson: record.salesperson || "",
           opsOwner: record.operationsOwner || "",
@@ -1130,8 +1181,13 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
           pickupRequired: !!routing.placeOfReceipt,
           deliveryRequired: !!routing.placeOfDelivery,
           placeOfReceipt: routing.placeOfReceipt || "",
-          origin: routing.originPort ? String(routing.originPort) : "",
-          destination: routing.destinationPort ? String(routing.destinationPort) : "",
+
+          // ✅ origin/destination: id + label so the field shows a value immediately
+          origin: portId(originPortObj),
+          originLabel: portLabel(originPortObj),
+          destination: portId(destinationPortObj),
+          destinationLabel: portLabel(destinationPortObj),
+
           placeOfDelivery: routing.placeOfDelivery || "",
           etd: isoToDisplay(routing.requestedETD || ""),
           eta: isoToDisplay(routing.requestedETA || ""),
@@ -1143,7 +1199,7 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
           shipper: party.shipper || "",
           consignee: party.consignee || "",
           notifyParty: party.notifyParty || "",
-          billingCustomer: party.billingCustomer || "",
+          billingCustomer: matchedCustomer?.id || party.billingCustomer || "",
           pickupAddress: party.pickupAddress || "",
           deliveryAddress: party.deliveryAddress || "",
           contactPerson: party.contactPerson || "",
@@ -1248,6 +1304,26 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
     clearErr((k) => k === `${group}.${name}`);
   };
 
+  // ✅ Port setters that keep the display label in sync
+  const portLabelById = (id) => {
+    const p = portOptions.find((o) => String(o.value) === String(id));
+    return p?.label || "";
+  };
+
+  const setOrigin = (v) =>
+    setForm((p) => ({
+      ...p,
+      origin: v,
+      originLabel: portLabelById(v),
+    }));
+
+  const setDestination = (v) =>
+    setForm((p) => ({
+      ...p,
+      destination: v,
+      destinationLabel: portLabelById(v),
+    }));
+
   const updateLine = (id, patch) => {
     setForm((p) => ({
       ...p,
@@ -1296,7 +1372,9 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
       mode,
       serviceType: "",
       origin: "",
+      originLabel: "",
       destination: "",
+      destinationLabel: "",
       carrier: "",
       pickupRequired: mode === "Road",
       deliveryRequired: mode === "Road",
@@ -1328,6 +1406,7 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
           ? {}
           : {
             customer: "",
+            customerDisplayName: "",
             billingCustomer:
               p.billingCustomer === p.customer ? "" : p.billingCustomer,
           }),
@@ -1365,8 +1444,42 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
             ? "Road"
             : form.mode;
 
-    const originTerminalId = plainId(q.originPort) || plainId(q.originTerminal);
-    const destinationTerminalId = plainId(q.destinationPort) || plainId(q.destinationTerminal);
+    const resolvePort = (value) => {
+      if (!value) return null;
+
+      const rawId = plainId(value);
+
+      const rawCode =
+        typeof value === "object"
+          ? String(value.portCode || "").trim().toUpperCase()
+          : String(value).trim().toUpperCase();
+
+      const rawName =
+        typeof value === "object"
+          ? String(value.portName || "").trim().toUpperCase()
+          : "";
+
+      return ports.find(
+        (p) =>
+          String(p.id) === rawId ||
+          String(p.portCode || "").trim().toUpperCase() === rawCode ||
+          (rawName &&
+            String(p.portName || "").trim().toUpperCase() === rawName)
+      );
+    };
+
+    const originPort = resolvePort(q.originPort || q.originTerminal);
+
+    const destinationPort = resolvePort(
+      q.destinationPort || q.destinationTerminal
+    );
+
+    const originTerminalId =
+      originPort?.id || plainId(q.originPort || q.originTerminal);
+
+    const destinationTerminalId =
+      destinationPort?.id ||
+      plainId(q.destinationPort || q.destinationTerminal);
 
     const ci = q.customerInformation?.[0] || {};
     const quoteCustomerName = ci.customerName || q.companyName || "";
@@ -1400,6 +1513,12 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
     const ct = q.commercialTerms?.[0] || {};
     const qCurrencyCode = plainText(q.currency);
 
+    // ✅ Resolve port labels from the quotation so the fields show a value
+    const originLabelText = portLabel(q.originPort || q.originTerminal);
+    const destinationLabelText = portLabel(
+      q.destinationPort || q.destinationTerminal,
+    );
+
     setForm((p) => ({
       ...p,
       bookingSource: "Flow",
@@ -1409,12 +1528,15 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
       mode,
       serviceType: q.serviceType || "",
 
-      customer: matchedCustomer?.id || p.customer,
+      customer: matchedCustomer?.id || quoteCustomerName || p.customer,
+      customerDisplayName: quoteCustomerName || p.customerDisplayName,
       billingCustomer: matchedCustomer?.id || p.billingCustomer,
       customerRef: q.enquiryNo ? `ENQ-${q.enquiryNo}` : p.customerRef,
 
       origin: originTerminalId || p.origin,
+      originLabel: originLabelText || p.originLabel,
       destination: destinationTerminalId || p.destination,
+      destinationLabel: destinationLabelText || p.destinationLabel,
 
       contactPerson: ci.customerName || p.contactPerson,
       email: ci.customerEmail || p.email,
@@ -1437,7 +1559,6 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
       },
 
       cargoLines: cargoLines.length ? cargoLines : [emptyLine()],
-      customerDisplayName: quoteCustomerName,
     }));
 
     setErrorList([]);
@@ -1500,15 +1621,89 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
     return next;
   };
 
+  // ✅ Build the instructionDetails payload so existing documents survive
+  const buildInstructionDetails = (f) => {
+    const files = f.docs?.files || [];
+
+    const existingDocRows = files
+      .filter((d) => d.isExisting && d.url)
+      .map((d) => ({
+        id: d.serverId ?? undefined,
+        document: d.url,
+        fileName: d.serverFileName || d.name,
+        originalName: d.originalName || d.name,
+        fileSize: d.size || 0,
+        contentType: d.contentType || null,
+        documentType: d.category || null,
+        uploadOn: d.uploadedOn || null,
+      }));
+
+    const [firstExisting, ...restExisting] = existingDocRows;
+
+    const baseInstruction = {
+      commercialInvoice: "",
+      customerReferenceDocument: "",
+      dangerousGoodsDocument: "",
+      deliveryInstructions: f.docs?.deliveryInstructions || "",
+      internalRemarks: f.docs?.internalRemarks || "",
+      packingList: "",
+      pickupInstructions: f.docs?.pickupInstructions || "",
+    };
+
+    if (!firstExisting) {
+      return [baseInstruction];
+    }
+
+    return [
+      { ...baseInstruction, ...firstExisting },
+      ...restExisting.map((row) => ({
+        deliveryInstructions: "",
+        internalRemarks: "",
+        pickupInstructions: "",
+        ...row,
+      })),
+    ];
+  };
+
   const runSave = async (action) => {
     if (busyRef.current || !editable) return null;
 
-    validateBooking(form, action === "submit" ? "submit" : "draft");
+    const validation = validateBooking(form, "submit", ports);
+
+    const ignoredValidationKeys = [
+      "origin",
+      "destination",
+      "incotermPlace",
+      "eta",
+      "equipment.containerQty"
+    ];
+
+    const remainingErrors = validation.list.filter(
+      (error) => !ignoredValidationKeys.includes(error.key)
+    );
+
+    setErrorList(remainingErrors);
+
+    if (remainingErrors.length > 0) {
+      setNotice({
+        type: "error",
+        text: "Please fill in all required fields before saving.",
+      });
+
+      const firstError = remainingErrors[0];
+
+      if (firstError?.section) {
+        scrollToSection(firstError.section);
+      }
+
+      return null;
+    }
 
     busyRef.current = true;
     setBusy(action);
 
     try {
+      // Keep your existing API payload and save logic here
       const isUpdate = Boolean(form.id && form.id > 0);
 
       const apiPayload = {
@@ -1518,14 +1713,16 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
         bookingStatus:
           action === "submit" ? "Submitted" : form.status || "Draft",
         bookingType: form.bookingType || "Standard",
-        bookingSource: form.bookingSource || "Direct",
+        type: form.bookingSource || "Direct",
         quotationNo: form.quotationNo || "",
         quotationDate: displayToIso(form.quotationDate) || null,
         transportMode: form.mode || "",
         serviceType: form.serviceType || "",
         salesperson: form.salesperson || "",
         operationsOwner: form.opsOwner || "",
-        customer: form.customer || "",
+
+        customer: form.customer || form.customerDisplayName || "",
+
         customerReference: form.customerRef || "",
         remarks: form.commercial?.remarks || "",
         bookingNo: form.bookingNo || "",
@@ -1613,17 +1810,8 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
           },
         ],
 
-        instructionDetails: [
-          {
-            commercialInvoice: "",
-            customerReferenceDocument: "",
-            dangerousGoodsDocument: "",
-            deliveryInstructions: form.docs?.deliveryInstructions || "",
-            internalRemarks: form.docs?.internalRemarks || "",
-            packingList: "",
-            pickupInstructions: form.docs?.pickupInstructions || "",
-          },
-        ],
+        // ✅ Send back every existing document so the backend doesn't delete
+        instructionDetails: buildInstructionDetails(form),
       };
 
       if (isUpdate) apiPayload.id = form.id;
@@ -1658,13 +1846,22 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
         status: apiPayload.bookingStatus,
       };
 
+      const preservedFiles = form.docs?.files || [];
+
       const next = applySaved(savedData);
+
+      next.docs = { ...next.docs, files: preservedFiles };
+      setForm(next);
+      savedRef.current = next;
+      baselineRef.current = snapshot(next);
 
       onNotify?.(
         action === "submit"
           ? `Booking ${next.bookingNo} submitted for approval.`
           : `Draft saved as ${next.bookingNo}.`,
       );
+
+      onSaveSuccess?.(next);
 
       return next;
     } catch (err) {
@@ -1793,6 +1990,7 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
           type: "success",
           text: `${label}. Status is now ${status}.`,
         });
+        onSaveSuccess?.(saved);
       }
     } catch (err) {
       setNotice({
@@ -1996,15 +2194,15 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
   const summaryRows = [
     ["Mode", form.mode],
     ["Service", form.serviceType || "-"],
-    ["Origin", form.origin || "-"],
-    ["Destination", form.destination || "-"],
+    ["Origin", form.originLabel || form.origin || "-"],
+    ["Destination", form.destinationLabel || form.destination || "-"],
     ["ETD", form.etd || "-"],
     ["ETA", form.eta || "-"],
     [
       "Customer",
       isFlowBooking
         ? form.customerDisplayName || customer?.name || "-"
-        : customer?.name || "-",
+        : form.customerDisplayName || customer?.name || "-",
     ],
     ["Packages", totals.packageText],
     ["Gross Weight", totals.weightKg ? `${fmtNum(totals.weightKg)} kg` : "-"],
@@ -2118,8 +2316,8 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
           <div
             role="status"
             className={`mb-2 flex items-start justify-between gap-2 rounded-md border px-3 py-2 text-[12px] ${notice.type === "error"
-                ? "border-red-200 bg-red-50 text-red-700 dark:border-red-900/60 dark:bg-red-900/20 dark:text-red-300"
-                : "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-900/20 dark:text-emerald-300"
+              ? "border-red-200 bg-red-50 text-red-700 dark:border-red-900/60 dark:bg-red-900/20 dark:text-red-300"
+              : "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-900/20 dark:text-emerald-300"
               }`}
           >
             <span className="flex items-center gap-1.5">
@@ -2151,8 +2349,8 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
               type="button"
               onClick={() => scrollToSection(s.id)}
               className={`flex shrink-0 items-center gap-1.5 border-b-2 px-2.5 py-2 text-[11px] font-semibold transition ${activeTab === s.id
-                  ? "border-blue-600 text-blue-700 dark:border-blue-400 dark:text-blue-300"
-                  : "border-transparent text-slate-500 hover:text-slate-800 dark:text-gray-400 dark:hover:text-gray-200"
+                ? "border-blue-600 text-blue-700 dark:border-blue-400 dark:text-blue-300"
+                : "border-transparent text-slate-500 hover:text-slate-800 dark:text-gray-400 dark:hover:text-gray-200"
                 }`}
             >
               <s.icon size={13} />
@@ -2198,11 +2396,7 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
                   label="Customer"
                   required
                   className="lg:col-span-2"
-                  value={
-                    isFlowBooking
-                      ? form.customerDisplayName || customer?.name || ""
-                      : form.customerDisplayName || customer?.name || form.customer || ""
-                  }
+                  value={form.customerDisplayName || customer?.name || ""}
                   onChange={(v) => {
                     if (isFlowBooking) return;
                     const matched = customers.find(
@@ -2216,6 +2410,7 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
                       customer: matched?.id || p.customer,
                       billingCustomer: matched?.id || p.billingCustomer,
                     }));
+                    clearErr((k) => k === "customer");
                   }}
                   placeholder={
                     isFlowBooking
@@ -2289,6 +2484,7 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
                 />
                 <TextField
                   label="Salesperson"
+                  required
                   value={form.salesperson}
                   onChange={(v) => {
                     salesTouched.current = true;
@@ -2347,13 +2543,14 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
                 />
 
                 <SearchableSelectField
-                  label={portLabels[0]}
-                  required
+                  label={portLabels?.[0] || "Origin"}
+                  // required
                   value={form.origin}
-                  onChange={(v) => set("origin", v)}
-                  options={portOptions}
+                  onChange={setOrigin}
+                  options={originOptions}
                   placeholder="Search port"
-                  error={errors.origin}
+                  // error={errors.origin}
+                  fallbackLabel={form.originLabel}
                 />
                 <DatePickerField
                   label="Requested ETA"
@@ -2370,13 +2567,14 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
                 />
 
                 <SearchableSelectField
-                  label={portLabels[1]}
-                  required
+                  label={portLabels?.[1] || "Destination"}
+                  // required
                   value={form.destination}
-                  onChange={(v) => set("destination", v)}
-                  options={portOptions}
+                  onChange={setDestination}
+                  options={destinationOptions}
                   placeholder="Search port"
-                  error={errors.destination}
+                  // error={errors.destination}
+                  fallbackLabel={form.destinationLabel}
                 />
                 <TextField
                   label="Carrier Preference"
@@ -2477,7 +2675,10 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
                   label="Phone"
                   type="tel"
                   value={form.phone}
-                  onChange={(v) => set("phone", v)}
+                  onChange={(v) => {
+                    const numeric = v.replace(/[^\d+\s-]/g, "");
+                    set("phone", numeric);
+                  }}
                   placeholder="+65 9876 5432"
                   error={errors.phone}
                   disabled={isFlowBooking}
@@ -2762,8 +2963,8 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
                                             toggleHandling(l.id, h)
                                           }
                                           className={`rounded-full border px-2.5 py-0.5 text-[10px] font-semibold transition ${on
-                                              ? "border-blue-500 bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-300"
-                                              : "border-slate-300 bg-white text-slate-600 hover:border-slate-400 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300"
+                                            ? "border-blue-500 bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-300"
+                                            : "border-slate-300 bg-white text-slate-600 hover:border-slate-400 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300"
                                             }`}
                                         >
                                           {h}
@@ -2851,7 +3052,7 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
             </Section>
 
             {/* 5. Equipment */}
-            {showEquipment && (
+            {/* {showEquipment && (
               <Section
                 id="equipment"
                 icon={Package}
@@ -2952,7 +3153,7 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
                   )}
                 </div>
               </Section>
-            )}
+            )} */}
 
             {/* 6. Commercial */}
             <Section
@@ -3074,8 +3275,8 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
                       addFiles(e.dataTransfer.files);
                     }}
                     className={`mt-2 flex flex-col items-center justify-center rounded-lg border-2 border-dashed px-3 py-5 text-center transition ${dragOver
-                        ? "border-blue-500 bg-blue-50 dark:bg-blue-500/10"
-                        : "border-slate-300 bg-slate-50/60 dark:border-gray-700 dark:bg-gray-900/40"
+                      ? "border-blue-500 bg-blue-50 dark:bg-blue-500/10"
+                      : "border-slate-300 bg-slate-50/60 dark:border-gray-700 dark:bg-gray-900/40"
                       }`}
                   >
                     <Upload
@@ -3224,8 +3425,7 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
               </h3>
               {errorList.length === 0 ? (
                 <p className="rounded-md bg-blue-50 px-2.5 py-2 text-[10px] text-blue-800 dark:bg-blue-500/10 dark:text-blue-300">
-                  Please complete all mandatory fields before submitting. Save
-                  Draft only needs customer and mode.
+                  Please complete all mandatory fields before saving or submitting.
                 </p>
               ) : (
                 <ul className="space-y-1">
@@ -3272,10 +3472,10 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
                     >
                       <span
                         className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${current
-                            ? "bg-blue-600 text-white"
-                            : done
-                              ? "bg-emerald-500 text-white"
-                              : "bg-slate-100 text-slate-400 dark:bg-gray-800"
+                          ? "bg-blue-600 text-white"
+                          : done
+                            ? "bg-emerald-500 text-white"
+                            : "bg-slate-100 text-slate-400 dark:bg-gray-800"
                           }`}
                       >
                         {done ? <Check size={11} /> : i + 1}
@@ -3283,8 +3483,8 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
                       <span className="min-w-0">
                         <span
                           className={`block text-[11px] font-semibold ${current
-                              ? "text-blue-700 dark:text-blue-300"
-                              : "text-slate-700 dark:text-gray-200"
+                            ? "text-blue-700 dark:text-blue-300"
+                            : "text-slate-700 dark:text-gray-200"
                             }`}
                         >
                           {s.label}
@@ -3415,8 +3615,8 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
                           m.onClick();
                         }}
                         className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-[12px] hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:hover:bg-gray-800 ${m.danger
-                            ? "text-red-600 dark:text-red-400"
-                            : "text-slate-700 dark:text-gray-200"
+                          ? "text-red-600 dark:text-red-400"
+                          : "text-slate-700 dark:text-gray-200"
                           }`}
                       >
                         {m.icon && <m.icon size={13} />}
