@@ -7,6 +7,7 @@ import {
   ChevronDown,
   ClipboardList,
   Filter,
+  FileText,
   MapPin,
   Pencil,
   Plane,
@@ -16,6 +17,10 @@ import {
   Truck,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+
+// ADJUST these two paths to where you placed the pdf folder
+import { useCommonPdf } from "../../../utils/pdf/useCommonPdf";
+import { enquiryPdfConfig } from "./enquiryPdfConfig";
 
 const modeIcons = { Sea: Ship, Air: Plane, Road: Truck };
 
@@ -122,6 +127,8 @@ const pickDestinationLocation = (r) => {
   return r?.destinationPort || r?.destinationAirport || r?.destinationTerminal;
 };
 
+// NOTE: `...item` keeps the raw API record on the row, so the PDF config
+// still receives docId, docDate, shipmentMode, originAirport, etc.
 const toRow = (item) => ({
   ...item,
 
@@ -175,6 +182,8 @@ const EnquiryList = ({
   onEdit,
   onBack,
 }) => {
+  const pdf = useCommonPdf(); // PDF preview / download
+
   const [search, setSearch] = useState("");
   const [modeFilter, setModeFilter] = useState("All");
   const [statusFilter, setStatusFilter] = useState("All");
@@ -182,16 +191,14 @@ const EnquiryList = ({
   const [pageSize, setPageSize] = useState(10);
 
   const rows = useMemo(() => {
-    return enquiries
-      .map(toRow)
-      .sort((a, b) => {
-        // Latest enquiry date first
-        const dateA = new Date(a.enquiryDateRaw || 0).getTime();
-        const dateB = new Date(b.enquiryDateRaw || 0).getTime();
+    return enquiries.map(toRow).sort((a, b) => {
+      // Latest enquiry date first
+      const dateA = new Date(a.enquiryDateRaw || 0).getTime();
+      const dateB = new Date(b.enquiryDateRaw || 0).getTime();
 
-        // If dates are the same, latest ID first
-        return dateB - dateA || Number(b.id || 0) - Number(a.id || 0);
-      });
+      // If dates are the same, latest ID first
+      return dateB - dateA || Number(b.id || 0) - Number(a.id || 0);
+    });
   }, [enquiries]);
 
   const filtered = useMemo(() => {
@@ -520,18 +527,32 @@ const EnquiryList = ({
                         </td>
                         <td className="whitespace-nowrap px-3 py-2 align-middle">
                           <span
-                            className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ring-inset ${statusStyles[status] || statusStyles.Open
-                              }`}
+                            className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ring-inset ${
+                              statusStyles[status] || statusStyles.Open
+                            }`}
                           >
                             <span
-                              className={`h-1.5 w-1.5 rounded-full ${statusDots[status] || statusDots.Open
-                                }`}
+                              className={`h-1.5 w-1.5 rounded-full ${
+                                statusDots[status] || statusDots.Open
+                              }`}
                             />
                             {status}
                           </span>
                         </td>
                         <td className="px-3 py-2 align-middle">
-                          <div className="flex justify-center">
+                          <div className="flex items-center justify-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                pdf.preview(enquiryPdfConfig, item)
+                              }
+                              className="flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 text-slate-500 transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700 dark:border-gray-700 dark:text-gray-300 dark:hover:border-rose-500/40 dark:hover:bg-rose-500/10 dark:hover:text-rose-300"
+                              title="Preview PDF"
+                              aria-label={`Preview PDF for enquiry ${item.enquiryNo || ""}`}
+                            >
+                              <FileText size={13} />
+                            </button>
+
                             <button
                               type="button"
                               onClick={() => onEdit?.(item)}
@@ -616,6 +637,9 @@ const EnquiryList = ({
           </div>
         </div>
       </div>
+
+      {/* PDF preview modal (renders only while a PDF is open) */}
+      {pdf.modal}
     </div>
   );
 };

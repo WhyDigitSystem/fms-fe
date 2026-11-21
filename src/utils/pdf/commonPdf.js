@@ -19,6 +19,7 @@ import { fmtDate, num, getStoredLogo } from "./pdfUtils";
  *
  * config = {
  *   title, fileName, theme, themeColor,
+ *   layout: "split" | (default centred)   // split = logo+title left, meta table right
  *   brand: { name, logo } | (data)=>({...}),
  *   intro:  [ "Dear Sir,", (data)=>"..." ]   // lines in the same rows as the meta table, under "To:"
  *   party:  { label:"To:", accessor | value, format },
@@ -253,6 +254,7 @@ export const resolveConfig = (config, data, brand = {}) => {
 
   const spec = {
     title: lit(config.title, data) || "Document",
+    layout: config.layout,
     logo: finalBrand.logo,
     companyName: finalBrand.name,
     theme: config.theme,

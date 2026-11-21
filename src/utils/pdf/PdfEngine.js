@@ -255,6 +255,86 @@ export const buildPdfDoc = (spec, brand = {}) => {
   };
 
   /* ================================================================
+   * SPLIT HEADER (spec.layout === "split")
+   * logo + title on the left, meta table on the right (same row),
+   * accent rule below, then "To:" and the intro lines.
+   * ================================================================ */
+  const drawSplit = () => {
+    const TOP = 30;
+    const W = 215;
+    const valX = 90;
+    const x = R - W;
+    const meta = (spec.meta || []).filter(Boolean);
+
+    const logo = brand.logo || spec.logo;
+    const box = logo ? drawImageFit(logo, L, TOP, 150, 40, "left") : null;
+    if (!box) {
+      const name = brand.name || spec.companyName || "";
+      if (name) T(name, L, TOP + 8, 20, true, navy);
+    }
+    const title = String(spec.title || "");
+    let fs = 17;
+    setF(fs, true);
+    while (fs > 10 && doc.getTextWidth(title) > x - L - 16) {
+      fs -= 0.5;
+      doc.setFontSize(fs);
+    }
+    T(title, L, TOP + 48, fs, true, navy);
+
+    meta.forEach(([lab, val], i) => {
+      const ry = TOP + i * META_RH;
+      rect(x, ry, W, META_RH, tint);
+      if (i < meta.length - 1)
+        ln(x, ry + META_RH, R, ry + META_RH, border, 0.6);
+      T(
+        String(lab || "").toUpperCase(),
+        x + 9,
+        ry + (META_RH - 7.5) / 2,
+        7.5,
+        true,
+        MUTED,
+      );
+      fitText(
+        isEmpty(val) ? "-" : val,
+        x + valX,
+        ry + (META_RH - 8.5) / 2,
+        W - valX - 8,
+        8.5,
+        true,
+        INK,
+        6,
+      );
+    });
+
+    rect(L, 104, CW, 2.2, accent);
+
+    const intro = (spec.intro || []).filter((t) => !isEmpty(t));
+    let cy = 122;
+    if (spec.party) {
+      const label = spec.party.label || "To:";
+      setF(9, true);
+      const lw = doc.getTextWidth(label);
+      T(label, TX, cy, 9, true, INK);
+      fitText(
+        spec.party.value || "",
+        TX + lw + 6,
+        cy,
+        CW - lw - 24,
+        9,
+        false,
+        INK,
+        6,
+      );
+      cy += intro.length ? 22 : 14;
+    }
+    intro.forEach((t) => {
+      fitText(t, TX, cy, CW - 12, 9, false, INK, 6);
+      cy += 14;
+    });
+    return cy;
+  };
+
+  /* ================================================================
    * "To:" + meta table
    * ================================================================ */
   const drawMeta = () => {
@@ -581,8 +661,12 @@ export const buildPdfDoc = (spec, brand = {}) => {
   /* ================================================================
    * BUILD
    * ================================================================ */
-  drawHeader();
-  let y = drawMeta();
+  let y;
+  if (spec.layout === "split") y = drawSplit();
+  else {
+    drawHeader();
+    y = drawMeta();
+  }
   (spec.sections || []).forEach((s) => {
     if (!s) return;
     const fn = sections[s.type];
