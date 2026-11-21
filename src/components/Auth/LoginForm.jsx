@@ -39,6 +39,36 @@ const AuthForm = () => {
 
   const [showForgotPassword, setShowForgotPassword] = useState(false);
 
+  // Store EFIT Logo in localStorage as Base64
+  const storeLogoInLocalStorage = async () => {
+    try {
+      // Check if logo is already stored
+      if (localStorage.getItem("eFitLogo")) {
+        return;
+      }
+
+      const response = await fetch(eFitLogo);
+      const blob = await response.blob();
+
+      const reader = new FileReader();
+
+      reader.onloadend = () => {
+        if (reader.result) {
+          localStorage.setItem("eFitLogo", reader.result);
+          console.log("EFIT Logo stored successfully in localStorage");
+        }
+      };
+
+      reader.onerror = () => {
+        console.error("Failed to convert EFIT Logo to Base64");
+      };
+
+      reader.readAsDataURL(blob);
+    } catch (error) {
+      console.error("Error storing EFIT Logo:", error);
+    }
+  };
+
   const getScreenAccess = async (orgId, role) => {
     try {
       console.log("Fetching screen access for:", { orgId, role });
@@ -153,6 +183,8 @@ const AuthForm = () => {
 
       // Only on success
       const userVO = response?.paramObjectsMap?.userVO || {};
+      // Store EFIT Logo in localStorage
+      await storeLogoInLocalStorage();
 
       dispatch(
         loginSuccess({
