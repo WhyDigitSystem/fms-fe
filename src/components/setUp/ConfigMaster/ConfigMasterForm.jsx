@@ -13,12 +13,14 @@ import {
   Trash2,
   X,
   ChevronDown,
+  PlayCircle,
 } from "lucide-react";
 
 import configAPI from "../../../api/configAPI";
 import modeMasterAPI from "../../../api/modeMasterAPI";
 import { serviceAPI } from "../../../api/serviceAPI";
 import { productAPI } from "../../../api/productAPI";
+import { companyAPI } from "../../../api/newEntry";
 
 const ORG_ID = Number(localStorage.getItem("orgId")) || 1;
 const BRANCH_ID = Number(localStorage.getItem("branchId")) || 0;
@@ -38,7 +40,10 @@ const emptyChild = () => ({
 const emptyHeader = () => ({
   company: "",
   active: true,
+  operationalStartup: "",
 });
+
+const OPERATIONAL_STARTUP_OPTIONS = ["Booking-based", "Direct"];
 
 const getBody = (response) => response?.data ?? response;
 
@@ -69,6 +74,10 @@ const getOptionLabel = (item, type) => {
 
   if (type === "service") {
     return item.serviceDescription ?? item.serviceCode ?? "";
+  }
+
+  if (type === "company") {
+    return item.companyName ?? item.companyCode ?? "";
   }
 
   return item.productDescription ?? item.productCode ?? "";
@@ -136,11 +145,10 @@ const ActiveToggle = ({ value, onChange }) => (
     type="button"
     onClick={() => onChange(!value)}
     aria-pressed={Boolean(value)}
-    className={`flex h-8 w-20 items-center justify-center gap-1.5 rounded-md border px-2 text-[11px] font-semibold transition ${
-      value
+    className={`flex h-8 w-20 items-center justify-center gap-1.5 rounded-md border px-2 text-[11px] font-semibold transition ${value
         ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300"
         : "border-slate-200 bg-slate-50 text-slate-500 hover:bg-slate-100 dark:border-gray-700 dark:bg-gray-900"
-    }`}
+      }`}
   >
     {value ? <Check size={12} /> : <X size={12} />}
     {value ? "Active" : "Inactive"}
@@ -187,6 +195,41 @@ const SelectField = ({
   </div>
 );
 
+/* -------------------- Operational Startup Toggle -------------------- */
+
+const OperationalStartupToggle = ({ value, onChange, error }) => (
+  <div className="min-w-0">
+    <div className="inline-flex overflow-hidden rounded-md border border-slate-300 shadow-sm dark:border-gray-700">
+      {OPERATIONAL_STARTUP_OPTIONS.map((option, index) => {
+        const selected = value === option;
+
+        return (
+          <button
+            key={option}
+            type="button"
+            onClick={() => onChange(selected ? "" : option)}
+            aria-pressed={selected}
+            className={`flex h-8 items-center gap-1.5 px-3 text-[11px] font-semibold transition ${selected
+                ? "bg-blue-600 text-white"
+                : "bg-white text-slate-600 hover:bg-slate-50 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800"
+              } ${index !== 0
+                ? selected
+                  ? "border-l border-blue-600"
+                  : "border-l border-slate-300 dark:border-gray-700"
+                : ""
+              }`}
+          >
+            {selected && <Check size={12} />}
+            {option}
+          </button>
+        );
+      })}
+    </div>
+
+    {error && <p className="mt-1 text-[10px] text-red-500">{error}</p>}
+  </div>
+);
+
 /* -------------------- Multi-Select Mode Buttons -------------------- */
 
 const ModeOptionButtons = ({ selectedModes, options, onToggle, disabled }) => (
@@ -206,11 +249,10 @@ const ModeOptionButtons = ({ selectedModes, options, onToggle, disabled }) => (
           onClick={() => onToggle(item)}
           aria-pressed={selected}
           title={label}
-          className={`inline-flex h-8 max-w-full min-w-0 items-center rounded-md border px-2 text-[11px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
-            selected
+          className={`inline-flex h-8 max-w-full min-w-0 items-center rounded-md border px-2 text-[11px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${selected
               ? "border-green-300 bg-green-50 text-green-700 dark:border-green-500/50 dark:bg-green-500/10 dark:text-green-400"
               : "border-slate-200 bg-white text-slate-600 hover:border-green-300 hover:bg-green-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300"
-          }`}
+            }`}
         >
           <span className="truncate">{label}</span>
         </button>
@@ -287,7 +329,6 @@ const ConfigChildTable = ({
         ? optionsLoading.services
         : optionsLoading.products;
 
-  // Get IDs selected in other rows, excluding the current row.
   const getAvailableOptions = (currentIndex) => {
     const selectedIds = rows
       .filter((_, index) => index !== currentIndex)
@@ -327,9 +368,8 @@ const ConfigChildTable = ({
                   onChange={(value) => onChange(index, type, value)}
                   options={getAvailableOptions(index)}
                   type={type}
-                  placeholder={`Select ${
-                    type === "service" ? "Service" : "Product"
-                  }`}
+                  placeholder={`Select ${type === "service" ? "Service" : "Product"
+                    }`}
                   disabled={isLoading}
                 />
               </div>
@@ -361,7 +401,7 @@ const normalizeRows = (rows, type, options = []) => {
 
     const explicitId =
       relation?.id ??
-      (typeof item?.[type] === "number" || typeof item?.[type] === "string"
+      (typeof item?.[type] === "number" || typeof item[type] === "string"
         ? item[type]
         : null) ??
       item?.[`${type}Id`] ??
@@ -402,11 +442,13 @@ const ConfigForm = ({ onBack, onSave, data }) => {
   const [modeOptions, setModeOptions] = useState([]);
   const [serviceOptions, setServiceOptions] = useState([]);
   const [productOptions, setProductOptions] = useState([]);
+  const [companyOptions, setCompanyOptions] = useState([]); // ← NEW
 
   const [optionsLoading, setOptionsLoading] = useState({
     modes: true,
     services: true,
     products: true,
+    companies: true, // ← NEW
   });
 
   const [loading, setLoading] = useState(false);
@@ -429,15 +471,21 @@ const ConfigForm = ({ onBack, onSave, data }) => {
       },
       {
         key: "services",
-        request: () => serviceAPI.getAll(orgId, branchId),
+        request: () => serviceAPI.getAll(orgId),
         keys: ["serviceResponseVO"],
         setter: setServiceOptions,
       },
       {
         key: "products",
-        request: () => productAPI.getAll(orgId, branchId),
+        request: () => productAPI.getAll(orgId),
         keys: ["productResponseVO"],
         setter: setProductOptions,
+      },
+      {
+        key: "companies", // ← NEW
+        request: () => companyAPI.getAllCompanies(orgId),
+        keys: ["companyVO"],
+        setter: setCompanyOptions,
       },
     ];
 
@@ -516,9 +564,16 @@ const ConfigForm = ({ onBack, onSave, data }) => {
           throw new Error("Configuration record not found.");
         }
 
+        const rawCompany = actualRecord.company;
+        const companyValue =
+          rawCompany && typeof rawCompany === "object"
+            ? String(rawCompany.id ?? "")
+            : String(rawCompany ?? "");
+
         setHeader({
-          company: actualRecord.company ?? "",
+          company: companyValue,
           active: isActive(actualRecord),
+          operationalStartup: actualRecord.operationalStartup ?? "",
         });
 
         setLoadedConfig(actualRecord);
@@ -526,8 +581,8 @@ const ConfigForm = ({ onBack, onSave, data }) => {
         if (!cancelled) {
           setError(
             err.response?.data?.paramObjectsMap?.errorMessage ??
-              err.message ??
-              "Failed to load configuration.",
+            err.message ??
+            "Failed to load configuration.",
           );
         }
       } finally {
@@ -657,8 +712,13 @@ const ConfigForm = ({ onBack, onSave, data }) => {
 
     const nextErrors = {};
 
-    if (!header.company.trim()) {
-      nextErrors.company = "Company name is required.";
+    if (!header.company) {
+      nextErrors.company = "Please select a company.";
+    }
+
+    if (!header.operationalStartup) {
+      nextErrors.operationalStartup =
+        "Select an operational startup option.";
     }
 
     validateRows(modes, "mode", nextErrors);
@@ -690,10 +750,10 @@ const ConfigForm = ({ onBack, onSave, data }) => {
 
       const payload = {
         ...(isEditMode ? { id: Number(editId) } : {}),
-        branch: branchId,
         orgId,
-        company: header.company.trim(),
+        company: Number(header.company), // ← id
         active: Boolean(header.active),
+        operationalStartup: header.operationalStartup,
         createdBy: data?.createdBy || userName,
         cancelRemarks: data?.cancelRemarks ?? "",
 
@@ -740,9 +800,9 @@ const ConfigForm = ({ onBack, onSave, data }) => {
       } else {
         setError(
           result?.paramObjectsMap?.errorMessage ??
-            result?.paramObjectsMap?.message ??
-            result?.message ??
-            "Failed to save configuration.",
+          result?.paramObjectsMap?.message ??
+          result?.message ??
+          "Failed to save configuration.",
         );
       }
     } catch (err) {
@@ -750,9 +810,9 @@ const ConfigForm = ({ onBack, onSave, data }) => {
 
       setError(
         err.response?.data?.paramObjectsMap?.errorMessage ??
-          err.response?.data?.paramObjectsMap?.message ??
-          err.message ??
-          "Failed to save configuration.",
+        err.response?.data?.paramObjectsMap?.message ??
+        err.message ??
+        "Failed to save configuration.",
       );
     } finally {
       setSaving(false);
@@ -806,12 +866,12 @@ const ConfigForm = ({ onBack, onSave, data }) => {
             <Section icon={Building2} title="Company">
               <div className="grid grid-cols-1 items-end gap-3 sm:grid-cols-[minmax(0,380px)_100px]">
                 <Field required error={errors.company}>
-                  <input
+                  <SelectField
                     value={header.company}
-                    onChange={(event) => {
+                    onChange={(value) => {
                       setHeader((previous) => ({
                         ...previous,
-                        company: event.target.value,
+                        company: value,
                       }));
 
                       setErrors((previous) => ({
@@ -819,11 +879,14 @@ const ConfigForm = ({ onBack, onSave, data }) => {
                         company: "",
                       }));
                     }}
-                    placeholder="Enter company name"
-                    maxLength={150}
-                    className={`${inputClass} ${
-                      errors.company ? "!border-red-500" : ""
-                    }`}
+                    options={companyOptions}
+                    type="company"
+                    placeholder={
+                      optionsLoading.companies
+                        ? "Loading..."
+                        : "Select company"
+                    }
+                    disabled={optionsLoading.companies}
                   />
                 </Field>
 
@@ -849,9 +912,9 @@ const ConfigForm = ({ onBack, onSave, data }) => {
               optionsLoading={optionsLoading}
               error={errors.mode}
               onToggleMode={toggleMode}
-              onChange={() => {}}
-              onAdd={() => {}}
-              onRemove={() => {}}
+              onChange={() => { }}
+              onAdd={() => { }}
+              onRemove={() => { }}
             />
           </div>
 
@@ -890,6 +953,32 @@ const ConfigForm = ({ onBack, onSave, data }) => {
               onRemove={(index) => removeChild(setProducts, index)}
             />
           </div>
+
+          {/* Third row: Operational Startup (single-select toggle) */}
+
+          <Section icon={PlayCircle} title="Operational Startup">
+            <Field
+              label="Operational Startup"
+              required
+              error={errors.operationalStartup}
+            >
+              <OperationalStartupToggle
+                value={header.operationalStartup}
+                error={errors.operationalStartup}
+                onChange={(value) => {
+                  setHeader((previous) => ({
+                    ...previous,
+                    operationalStartup: value,
+                  }));
+
+                  setErrors((previous) => ({
+                    ...previous,
+                    operationalStartup: "",
+                  }));
+                }}
+              />
+            </Field>
+          </Section>
 
           {/* Actions */}
 

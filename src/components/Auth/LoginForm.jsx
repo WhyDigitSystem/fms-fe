@@ -70,6 +70,55 @@ const AuthForm = () => {
     }
   };
 
+  // ✅ Fetch and store company modes + operationStartUp
+  const getCompanyModes = async (orgId) => {
+    try {
+      console.log("Fetching company modes for orgId:", orgId);
+      const response = await apiClient.get(
+        `/api/basicmaster/getCompanyMode?orgId=${orgId}`,
+      );
+
+      console.log("Company Mode Response:", response);
+
+      const companyModes = response?.paramObjectsMap?.companyMode;
+      const operationStartUp = response?.paramObjectsMap?.operationStartUp;
+
+      if (response?.status && Array.isArray(companyModes)) {
+        // Full list with IDs
+        localStorage.setItem("companyModes", JSON.stringify(companyModes));
+
+        // Just mode names for quick dropdown usage
+        const modeNames = companyModes.map((item) => item.mode);
+        localStorage.setItem("modeOptions", JSON.stringify(modeNames));
+
+        // Lookup maps: { id: mode } and { mode: id }
+        const modeById = {};
+        const idByMode = {};
+        companyModes.forEach(({ id, mode }) => {
+          modeById[id] = mode;
+          idByMode[mode] = id;
+        });
+        localStorage.setItem("modeById", JSON.stringify(modeById));
+        localStorage.setItem("idByMode", JSON.stringify(idByMode));
+
+        console.log("Company modes stored successfully:", companyModes);
+      } else {
+        console.warn("Company modes not available or invalid response");
+      }
+
+      // ✅ Store operationStartUp even if modes array is missing
+      if (operationStartUp != null && operationStartUp !== "") {
+        localStorage.setItem("operationStartUp", String(operationStartUp));
+        console.log("Operation StartUp stored:", operationStartUp);
+      } else {
+        console.warn("operationStartUp not present in response");
+      }
+    } catch (error) {
+      console.error("Error fetching company modes:", error);
+      // Non-blocking — login should still succeed
+    }
+  };
+
   const handleLoginSubmit = async (e) => {
     e.preventDefault();
     setErrorMessage("");
@@ -163,6 +212,9 @@ const AuthForm = () => {
           }
         }
 
+        // ✅ Fetch and store company modes + operationStartUp (before navigation)
+        await getCompanyModes(userVO.orgId);
+
         localStorage.setItem("token", userVO.token);
         localStorage.setItem("tokenId", userVO.tokenId);
         localStorage.setItem("LoginMessage", "true");
@@ -217,16 +269,8 @@ const AuthForm = () => {
           {/* Logo */}
           <div className="text-center mb-8">
             <div className="flex items-center justify-center gap-3 mb-4">
-              {/* <div className="w-20 h-20 rounded-xl flex items-center justify-center">
-                <img
-                  src={eFitLogo}
-                  alt="EFIT Logo"
-                  className="w-full h-full object-contain"
-                />
-              </div> */}
               <div className="w-12 h-12 bg-gradient-to-r from-blue-600 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
                 <Truck className="h-6 w-6 text-white" />
-                {/* {eFitLogo} */}
               </div>
               <div className="text-left">
                 <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
@@ -345,8 +389,6 @@ const AuthForm = () => {
 
         <div className="flex-1 flex items-center justify-center p-2 relative z-10">
           <div className="max-w-md w-full -mt-6">
-            {" "}
-            {/* Added -mt-6 here */}
             <div className="text-center mb-4">
               <div className="w-40 h-40 mx-auto flex items-center justify-center">
                 <img

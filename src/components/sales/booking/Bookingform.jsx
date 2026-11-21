@@ -1523,6 +1523,7 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
       ...p,
       bookingSource: "Flow",
       quotationNo: String(q.id),
+      quotationDocId: q.docId || "", 
       quotationDate: isoToDisplay(q.docDate),
 
       mode,
@@ -1714,7 +1715,7 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
           action === "submit" ? "Submitted" : form.status || "Draft",
         bookingType: form.bookingType || "Standard",
         type: form.bookingSource || "Direct",
-        quotationNo: form.quotationNo || "",
+        quotationNo: form.quotationDocId || "", 
         quotationDate: displayToIso(form.quotationDate) || null,
         transportMode: form.mode || "",
         serviceType: form.serviceType || "",

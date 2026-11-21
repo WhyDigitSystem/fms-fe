@@ -4,7 +4,6 @@ import {
   ShoppingCart,
   Database,
   Settings,
-  X,
 } from "lucide-react";
 import { useDispatch, useSelector } from "react-redux";
 import { NavLink } from "react-router-dom";
@@ -20,7 +19,8 @@ const Sidebar = () => {
     user?.type?.toUpperCase() ||
     localStorage.getItem("userType")?.toUpperCase();
 
-  const isSAdmin = userType === "SADMIN";
+  const isSAdmin = userType === "SADMIN" || userType === "SUPERADMIN";
+  const isSuperAdmin = userType === "SUPERADMIN";
 
   const navigation = [
     {
@@ -50,14 +50,27 @@ const Sidebar = () => {
       icon: Settings,
       color: "slate",
       screenCode: "SETUP",
+      sadminOnly: true,
     },
   ];
 
   const filteredNavigation = navigation.filter((item) => {
-    if (isSAdmin) {
-      return item.screenCode === "SETUP" || userType === "SUPERADMIN";
+    // SUPERADMIN: only Setup (Configuration + New Entries inside)
+    if (isSuperAdmin) {
+      return item.screenCode === "SETUP";
     }
 
+    // SADMIN: only Setup
+    if (userType === "SADMIN") {
+      return item.screenCode === "SETUP";
+    }
+
+    // SADMIN-only items hidden from everyone else
+    if (item.sadminOnly) {
+      return false;
+    }
+
+    // ADMIN and other roles: screen access
     return hasScreenAccess(item.screenCode);
   });
 
@@ -96,7 +109,6 @@ const Sidebar = () => {
 
   return (
     <>
-      {/* Mobile backdrop */}
       <button
         type="button"
         aria-label="Close sidebar"
@@ -111,7 +123,6 @@ const Sidebar = () => {
         )}
       />
 
-      {/* Sidebar */}
       <aside
         id="sidebar"
         aria-label="Sidebar Navigation"
@@ -127,9 +138,6 @@ const Sidebar = () => {
           sidebarOpen ? "md:w-[170px]" : "md:w-20",
         )}
       >
-        {/* Mobile sidebar header */}
-
-        {/* Navigation links */}
         <nav className="mt-1 flex-1 space-y-0.5 overflow-x-hidden overflow-y-auto px-1.5 py-1">
           {filteredNavigation.map((item) => {
             const Icon = item.icon;
@@ -156,7 +164,6 @@ const Sidebar = () => {
               >
                 {({ isActive }) => (
                   <>
-                    {/* Colored icon */}
                     <div
                       className={clsx(
                         "flex shrink-0 items-center justify-center rounded-md p-1.5",
@@ -171,7 +178,6 @@ const Sidebar = () => {
                       />
                     </div>
 
-                    {/* Label */}
                     <span
                       className={clsx(
                         "font-medium text-gray-600 dark:text-gray-300",
@@ -190,7 +196,6 @@ const Sidebar = () => {
           })}
         </nav>
 
-        {/* Footer */}
         <div
           className={clsx(
             "shrink-0 overflow-hidden border-t border-gray-100 dark:border-gray-800",

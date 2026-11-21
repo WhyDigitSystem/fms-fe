@@ -25,6 +25,13 @@ const SALES = [
     screenCode: "QUOTATION",
   },
   {
+    name: "Pre-Job Opening",
+    icon: FileText,
+    path: "/pre-job-opening",
+    color: "indigo",
+    screenCode: "PRE JOB OPENING",
+  },
+  {
     name: "Booking",
     icon: CalendarCheck,
     path: "/booking",

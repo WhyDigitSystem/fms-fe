@@ -4,6 +4,7 @@ import Quotation from "../components/sales/quotation/Quotation";
 import Booking from "../components/sales/booking/Booking";
 import JobWorkspace from "../components/sales/JobWorkspace/JobWorkspace";
 import Job from "../components/sales/JobWorkspace/Job";
+import PreJobOpeningMaster from "../components/sales/PreJobOpening/PreJobOpeningMaster";
 
 const salesRoutes = [
   {
@@ -18,6 +19,10 @@ const salesRoutes = [
     path: "quotation",
     element: <Quotation />,
   },
+  {
+      path: "pre-job-opening",
+      element: <PreJobOpeningMaster />,
+    },
   {
     path: "booking",
     element: <Booking />,

@@ -11,6 +11,7 @@ import {
   Plane,
   Save,
   Ship,
+  Train,
   Truck,
   X,
 } from "lucide-react";
@@ -112,7 +113,7 @@ const emptyCargo = {
 const initialForm = {
   id: 0,
   enquiryNo: "",
-  enquiryDate: todayDisplay(), // ✅ store display format
+  enquiryDate: todayDisplay(),
   company: "",
   movement: "Export",
   mode: "Sea",
@@ -125,11 +126,71 @@ const initialForm = {
   cargoDetails: { ...emptyCargo },
 };
 
-const modes = [
-  { value: "Sea", icon: Ship, hint: "Ocean freight" },
-  { value: "Air", icon: Plane, hint: "Air freight" },
-  { value: "Road", icon: Truck, hint: "Road transport" },
-];
+/* ------------------------------------------------------------------ */
+/* ✅ Mode icon / hint registry for dynamic company modes              */
+/* ------------------------------------------------------------------ */
+const MODE_ICON_MAP = {
+  SEA: Ship,
+  OCEAN: Ship,
+  AIR: Plane,
+  ROAD: Truck,
+  RAIL: Train,
+  RAILWAY: Train,
+};
+
+const MODE_HINT_MAP = {
+  SEA: "Ocean freight",
+  OCEAN: "Ocean freight",
+  AIR: "Air freight",
+  ROAD: "Road transport",
+  RAIL: "Rail freight",
+  RAILWAY: "Rail freight",
+};
+
+const getModeIcon = (mode) => {
+  const key = String(mode || "").trim().toUpperCase();
+  return MODE_ICON_MAP[key] || Truck;
+};
+
+const getModeHint = (mode) => {
+  const key = String(mode || "").trim().toUpperCase();
+  return MODE_HINT_MAP[key] || "Freight transport";
+};
+
+/**
+ * ✅ Build shipment modes from localStorage (populated at login).
+ * Falls back to a safe default list if nothing is stored yet.
+ */
+const buildModesFromStorage = () => {
+  try {
+    const raw = localStorage.getItem("companyModes");
+    const stored = raw ? JSON.parse(raw) : [];
+
+    if (Array.isArray(stored) && stored.length > 0) {
+      return stored
+        .filter((m) => m && m.mode)
+        .map((m) => {
+          const display = titleCase(m.mode); // "Sea", "Air", "Road", "Rail"
+          return {
+            value: display, // what form.mode holds / shows
+            apiValue: String(m.mode).toUpperCase(), // what the API expects
+            id: String(m.id || ""),
+            icon: getModeIcon(m.mode),
+            hint: getModeHint(m.mode),
+          };
+        });
+    }
+  } catch (error) {
+    console.error("Failed to read companyModes from localStorage:", error);
+  }
+
+  // Fallback defaults if storage is empty
+  return [
+    { value: "Sea", apiValue: "SEA", id: "", icon: Ship, hint: "Ocean freight" },
+    { value: "Air", apiValue: "AIR", id: "", icon: Plane, hint: "Air freight" },
+    { value: "Road", apiValue: "ROAD", id: "", icon: Truck, hint: "Road transport" },
+  ];
+};
 
 /* ------------------------------------------------------------------ */
 /* Compact primitives                                                   */
@@ -207,7 +268,7 @@ const DatePickerField = ({
   required,
   error,
   onChange,
-  value, // display format dd-mm-yyyy
+  value,
   className = "",
 }) => {
   const hiddenDateRef = useRef(null);
@@ -243,7 +304,6 @@ const DatePickerField = ({
         >
           <CalendarIcon size={13} />
         </button>
-        {/* Hidden native date input for the calendar widget */}
         <input
           type="date"
           ref={hiddenDateRef}
@@ -482,10 +542,13 @@ const ModeCard = ({ value, hint, icon: Icon, selected, onClick }) => (
 
 export default function EnquiryForm({ onBack = () => { }, onSave, editData }) {
   const [step, setStep] = useState(1);
+
+  // ✅ Build dynamic modes from localStorage (memoized once per mount)
+  const modes = useMemo(() => buildModesFromStorage(), []);
+
   const [form, setForm] = useState(() => ({
     ...initialForm,
     ...editData,
-    // ✅ Normalize the date into dd-mm-yyyy for display
     enquiryDate: editData?.enquiryDate
       ? isoToDisplay(editData.enquiryDate)
       : todayDisplay(),
@@ -502,11 +565,9 @@ export default function EnquiryForm({ onBack = () => { }, onSave, editData }) {
   const [loadingDocId, setLoadingDocId] = useState(false);
   const [recordLoading, setRecordLoading] = useState(false);
 
-  // Port data
   const [ports, setPorts] = useState([]);
   const [portsLoading, setPortsLoading] = useState(false);
 
-  // Cargo-type / cargo-group lookups
   const [cargoTypeValues, setCargoTypeValues] = useState([]);
   const [cargoGroupValues, setCargoGroupValues] = useState([]);
   const [lovLoading, setLovLoading] = useState(false);
@@ -515,9 +576,6 @@ export default function EnquiryForm({ onBack = () => { }, onSave, editData }) {
   const branch = Number(localStorage.getItem("branchId"));
   const loginUserName = localStorage.getItem("userName") || "SYSTEM";
 
-  // --------------------------------------------------------------
-  // Fetch ports
-  // --------------------------------------------------------------
   const fetchPorts = useCallback(async () => {
     if (!orgId || !branch) return;
     try {
@@ -535,9 +593,6 @@ export default function EnquiryForm({ onBack = () => { }, onSave, editData }) {
     }
   }, [orgId, branch]);
 
-  // --------------------------------------------------------------
-  // Fetch cargo type + cargo group list values
-  // --------------------------------------------------------------
   const fetchLookups = useCallback(async () => {
     if (!orgId) return;
     try {
@@ -555,9 +610,6 @@ export default function EnquiryForm({ onBack = () => { }, onSave, editData }) {
     }
   }, [orgId]);
 
-  // --------------------------------------------------------------
-  // Fetch auto-generated enquiry number when creating
-  // --------------------------------------------------------------
   const fetchEnquiryDocId = useCallback(async () => {
     try {
       setLoadingDocId(true);
@@ -575,9 +627,6 @@ export default function EnquiryForm({ onBack = () => { }, onSave, editData }) {
     }
   }, [orgId]);
 
-  // --------------------------------------------------------------
-  // Load full record by id in edit mode
-  // --------------------------------------------------------------
   const fetchEnquiryById = useCallback(async (id) => {
     try {
       setRecordLoading(true);
@@ -586,7 +635,6 @@ export default function EnquiryForm({ onBack = () => { }, onSave, editData }) {
 
       const pickOrigin =
         record.originTerminal || record.originPort || record.originAirport;
-
       const pickDestination =
         record.destinationTerminal ||
         record.destinationPort ||
@@ -595,7 +643,7 @@ export default function EnquiryForm({ onBack = () => { }, onSave, editData }) {
       setForm({
         id: record.id || id,
         enquiryNo: record.docId || "",
-        enquiryDate: isoToDisplay(record.docDate || todayIso()), // ✅ display format
+        enquiryDate: isoToDisplay(record.docDate || todayIso()),
         company: record.company || record.customer || "",
         movement: record.movement ? titleCase(record.movement) : "Export",
         mode: record.shipmentMode ? titleCase(record.shipmentMode) : "Sea",
@@ -637,9 +685,6 @@ export default function EnquiryForm({ onBack = () => { }, onSave, editData }) {
     }
   }, []);
 
-  // --------------------------------------------------------------
-  // On mount
-  // --------------------------------------------------------------
   useEffect(() => {
     fetchPorts();
     fetchLookups();
@@ -657,6 +702,17 @@ export default function EnquiryForm({ onBack = () => { }, onSave, editData }) {
     setToast("");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editData?.id]);
+
+  // ✅ Ensure the selected mode exists in the dynamically-loaded mode list.
+  // (e.g. an old record had "Sea" but company now only has Air/Road)
+  useEffect(() => {
+    if (!modes.length) return;
+    const exists = modes.some((m) => m.value === form.mode);
+    if (!exists) {
+      setForm((current) => ({ ...current, mode: modes[0].value }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modes]);
 
   const cargo = form.cargoDetails;
 
@@ -679,6 +735,10 @@ export default function EnquiryForm({ onBack = () => { }, onSave, editData }) {
   };
 
   const changeMode = (mode) => {
+    // ✅ Match on apiValue so we stay aligned with backend enums
+    const selected = modes.find((m) => m.value === mode);
+    const apiValue = selected?.apiValue || String(mode).toUpperCase();
+
     setForm((current) => ({
       ...current,
       mode,
@@ -688,7 +748,7 @@ export default function EnquiryForm({ onBack = () => { }, onSave, editData }) {
       destination: "",
       cargoDetails: {
         ...emptyCargo,
-        cargoType: mode === "Sea" ? "LCL" : "",
+        cargoType: apiValue === "SEA" ? "LCL" : "",
       },
     }));
     setErrors({});
@@ -697,7 +757,6 @@ export default function EnquiryForm({ onBack = () => { }, onSave, editData }) {
   // --------------------------------------------------------------
   // Derived data
   // --------------------------------------------------------------
-
   const cities = useMemo(() => {
     const seen = new Map();
     ports.forEach((p) => {
@@ -726,10 +785,16 @@ export default function EnquiryForm({ onBack = () => { }, onSave, editData }) {
     );
   }, [cities, form.origin]);
 
+  // ✅ Use the API value (uppercase) to filter ports by type
+  const selectedModeApiValue = useMemo(() => {
+    const found = modes.find((m) => m.value === form.mode);
+    return found?.apiValue || String(form.mode || "").toUpperCase();
+  }, [modes, form.mode]);
+
   const getPortsForCity = useCallback(
     (city) => {
       if (!city || !ports.length) return [];
-      const modeUpper = String(form.mode || "").trim().toUpperCase();
+      const modeUpper = String(selectedModeApiValue || "").trim().toUpperCase();
       const cityUpper = String(city).trim().toUpperCase();
       return ports
         .filter((p) => {
@@ -742,7 +807,7 @@ export default function EnquiryForm({ onBack = () => { }, onSave, editData }) {
           label: `${p.portName} (${p.portCode})`,
         }));
     },
-    [ports, form.mode],
+    [ports, selectedModeApiValue],
   );
 
   const originPortOptions = useMemo(
@@ -755,7 +820,6 @@ export default function EnquiryForm({ onBack = () => { }, onSave, editData }) {
     [getPortsForCity, form.destination],
   );
 
-  // ✅ Auto-select when a city has exactly one matching port
   useEffect(() => {
     if (
       originPortOptions.length === 1 &&
@@ -816,11 +880,19 @@ export default function EnquiryForm({ onBack = () => { }, onSave, editData }) {
     [cargoGroupValues],
   );
 
-  const portLabels = {
-    Sea: ["Origin Port", "Destination Port"],
-    Air: ["Origin Airport", "Destination Airport"],
-    Road: ["Origin Terminal", "Destination Terminal"],
-  }[form.mode];
+  // ✅ Port labels — keyed by API value so RAIL/Rail is covered
+  const portLabels = useMemo(() => {
+    const map = {
+      SEA: ["Origin Port", "Destination Port"],
+      AIR: ["Origin Airport", "Destination Airport"],
+      ROAD: ["Origin Terminal", "Destination Terminal"],
+      RAIL: ["Origin Rail Terminal", "Destination Rail Terminal"],
+    };
+    return map[selectedModeApiValue] || [
+      "Origin Terminal",
+      "Destination Terminal",
+    ];
+  }, [selectedModeApiValue]);
 
   const totalWeight = useMemo(() => Number(cargo.weight || 0), [cargo.weight]);
 
@@ -880,7 +952,7 @@ export default function EnquiryForm({ onBack = () => { }, onSave, editData }) {
         }
       });
 
-      if (form.mode === "Sea") {
+      if (selectedModeApiValue === "SEA") {
         if (!cargo.cargoType) nextErrors.cargoType = "Select cargo type.";
         if (cargo.cargoType === "FCL" && !positive(cargo.containers)) {
           nextErrors.containers = "Enter the number of containers.";
@@ -896,16 +968,24 @@ export default function EnquiryForm({ onBack = () => { }, onSave, editData }) {
         }
       }
 
-      if (form.mode === "Air") {
+      if (selectedModeApiValue === "AIR") {
         if (!positive(cargo.packages)) {
           nextErrors.packages = "Enter the number of packages.";
         }
         if (!positive(cargo.weight)) nextErrors.weight = "Enter gross weight.";
       }
 
-      if (form.mode === "Road") {
+      if (selectedModeApiValue === "ROAD") {
         if (!cargo.vehicleType) {
           nextErrors.vehicleType = "Select a vehicle type.";
+        }
+        if (!positive(cargo.weight)) nextErrors.weight = "Enter gross weight.";
+      }
+
+      // ✅ RAIL – lightweight validation for now (packages + weight)
+      if (selectedModeApiValue === "RAIL") {
+        if (!positive(cargo.packages)) {
+          nextErrors.packages = "Enter the number of packages.";
         }
         if (!positive(cargo.weight)) nextErrors.weight = "Enter gross weight.";
       }
@@ -966,8 +1046,6 @@ export default function EnquiryForm({ onBack = () => { }, onSave, editData }) {
       const destinationTerminal = toNumber(form.pod);
 
       const isUpdate = Boolean(form.id && form.id > 0);
-
-      // ✅ Convert dd-mm-yyyy → yyyy-mm-dd for the API
       const enquiryDateIso = displayToIso(form.enquiryDate) || null;
 
       const payload = {
@@ -976,7 +1054,8 @@ export default function EnquiryForm({ onBack = () => { }, onSave, editData }) {
         createdBy: loginUserName,
 
         enquiryDate: enquiryDateIso,
-        shipmentMode: form.mode.toUpperCase(),
+        // ✅ Store the API value (already uppercase)
+        shipmentMode: selectedModeApiValue,
         movement: form.movement.toUpperCase(),
 
         fromLocation: fromLocationId,
@@ -1255,7 +1334,6 @@ export default function EnquiryForm({ onBack = () => { }, onSave, editData }) {
                   </p>
                 ) : (
                   <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
-                    {/* ✅ Searchable From / To */}
                     <SearchableSelectField
                       label="From"
                       required
@@ -1324,7 +1402,9 @@ export default function EnquiryForm({ onBack = () => { }, onSave, editData }) {
                     {(() => {
                       const types = getAvailableTypesForCity(form.origin);
                       return types.length
-                        ? `Available types: ${types.join(", ")}. Switch mode to continue.`
+                        ? `Available types: ${types.join(
+                          ", ",
+                        )}. Switch mode to continue.`
                         : "No ports at all for this city.";
                     })()}
                   </p>
@@ -1341,7 +1421,9 @@ export default function EnquiryForm({ onBack = () => { }, onSave, editData }) {
                           form.destination,
                         );
                         return types.length
-                          ? `Available types: ${types.join(", ")}. Switch mode to continue.`
+                          ? `Available types: ${types.join(
+                            ", ",
+                          )}. Switch mode to continue.`
                           : "No ports at all for this city.";
                       })()}
                     </p>
@@ -1397,7 +1479,6 @@ export default function EnquiryForm({ onBack = () => { }, onSave, editData }) {
                       disabled
                       error={errors.enquiryNo}
                     />
-                    {/* ✅ dd-mm-yyyy Date Input */}
                     <DatePickerField
                       label="Enquiry date"
                       required
@@ -1466,7 +1547,7 @@ export default function EnquiryForm({ onBack = () => { }, onSave, editData }) {
                   subtitle="Fields adapt to the selected mode"
                 >
                   <div className="grid grid-cols-2 gap-1.5">
-                    {form.mode === "Sea" && (
+                    {selectedModeApiValue === "SEA" && (
                       <>
                         <SelectField
                           className="col-span-2"
@@ -1558,7 +1639,7 @@ export default function EnquiryForm({ onBack = () => { }, onSave, editData }) {
                       </>
                     )}
 
-                    {form.mode === "Air" && (
+                    {selectedModeApiValue === "AIR" && (
                       <>
                         <TextField
                           label="No. of packages"
@@ -1602,7 +1683,7 @@ export default function EnquiryForm({ onBack = () => { }, onSave, editData }) {
                       </>
                     )}
 
-                    {form.mode === "Road" && (
+                    {selectedModeApiValue === "ROAD" && (
                       <>
                         <SelectField
                           className="col-span-2"
@@ -1638,6 +1719,50 @@ export default function EnquiryForm({ onBack = () => { }, onSave, editData }) {
                         />
                       </>
                     )}
+
+                    {/* ✅ RAIL – falls back to generic package/weight inputs */}
+                    {selectedModeApiValue === "RAIL" && (
+                      <>
+                        <TextField
+                          label="No. of packages"
+                          required
+                          type="number"
+                          value={cargo.packages}
+                          onChange={(value) => setCargoField("packages", value)}
+                          error={errors.packages}
+                        />
+                        <TextField
+                          label="Gross weight (KG)"
+                          required
+                          type="number"
+                          value={cargo.weight}
+                          onChange={(value) => setCargoField("weight", value)}
+                          error={errors.weight}
+                        />
+                      </>
+                    )}
+
+                    {/* ✅ Fallback for any other custom mode the company adds */}
+                    {!["SEA", "AIR", "ROAD", "RAIL"].includes(
+                      selectedModeApiValue,
+                    ) && (
+                        <>
+                          <TextField
+                            label="No. of packages"
+                            type="number"
+                            value={cargo.packages}
+                            onChange={(value) => setCargoField("packages", value)}
+                            error={errors.packages}
+                          />
+                          <TextField
+                            label="Gross weight (KG)"
+                            type="number"
+                            value={cargo.weight}
+                            onChange={(value) => setCargoField("weight", value)}
+                            error={errors.weight}
+                          />
+                        </>
+                      )}
                   </div>
 
                   <div className="rounded-md bg-slate-50 px-2 py-1 dark:bg-gray-900">

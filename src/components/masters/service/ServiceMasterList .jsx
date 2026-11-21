@@ -37,7 +37,7 @@ export default function ServiceMasterList({
       if (showRefresh) setRefreshing(true);
       else setLoading(true);
 
-      const response = await serviceAPI.getAll(ORG_ID, BRANCH_ID);
+      const response = await serviceAPI.getAll(ORG_ID);
       const data = Array.isArray(response) ? response : [];
 
       setServices(

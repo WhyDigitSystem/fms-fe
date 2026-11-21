@@ -1,11 +1,11 @@
 import apiClient from "./apiClient";
 
 export const serviceAPI = {
-  getAll: async (orgId, branch) => {
+  getAll: async (orgId) => {
     const res = await apiClient.get(
       "/api/basicmaster/getServiceByOrgIdAndBranch",
       {
-        params: { orgId, branch },
+        params: { orgId },
       },
     );
     return res?.paramObjectsMap?.serviceResponseVO ?? [];

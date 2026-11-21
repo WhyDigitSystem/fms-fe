@@ -18,6 +18,34 @@ const BRANCH_ID = Number(localStorage.getItem("branchId")) || 0;
 const isActive = (value) =>
   value === true || value === 1 || value === "Active" || value === "Y";
 
+/* Safely read company label from either a string or { id, company } object */
+const getCompanyLabel = (company) => {
+  if (!company) return "";
+  if (typeof company === "string") return company;
+  if (typeof company === "object") {
+    return company.company ?? company.companyName ?? company.name ?? "";
+  }
+  return String(company);
+};
+
+/* Extract the array from any of the common wrapper shapes */
+const extractConfigList = (response) => {
+  if (!response) return [];
+
+  // In case the axios wrapper already unwrapped to the body
+  const body = response?.data ?? response;
+
+  if (Array.isArray(body)) return body;
+
+  const list =
+    body?.paramObjectsMap?.configResponseVO ??
+    body?.paramObjectsMap?.configVO ??
+    body?.configResponseVO ??
+    body?.configVO;
+
+  return Array.isArray(list) ? list : [];
+};
+
 export default function ConfigMasterList({
   onAdd,
   onEdit,
@@ -50,9 +78,8 @@ export default function ConfigMasterList({
         setLoading(true);
       }
 
-      const response = await configAPI.getAll(ORG_ID, BRANCH_ID);
-
-      const data = Array.isArray(response) ? response : [];
+      const response = await configAPI.getAll(ORG_ID);
+      const data = extractConfigList(response);
 
       setConfigs(
         [...data].sort((a, b) => Number(b.id || 0) - Number(a.id || 0)),
@@ -75,9 +102,7 @@ export default function ConfigMasterList({
     const query = search.toLowerCase().trim();
 
     return (
-      String(item.company || "")
-        .toLowerCase()
-        .includes(query) ||
+      getCompanyLabel(item.company).toLowerCase().includes(query) ||
       (item.configModes || []).some((row) =>
         String(row.mode || "")
           .toLowerCase()
@@ -113,7 +138,7 @@ export default function ConfigMasterList({
   const exportToExcel = () => {
     const rows = filteredConfigs.map((item, index) => ({
       "S.No": index + 1,
-      "Company Name": item.company || "",
+      "Company Name": getCompanyLabel(item.company),
       Branch:
         typeof item.branch === "object"
           ? item.branch?.branch || ""
@@ -264,7 +289,7 @@ export default function ConfigMasterList({
                   </td>
 
                   <td className="whitespace-nowrap px-3 py-3 font-medium text-gray-800 dark:text-gray-100">
-                    {item.company || "-"}
+                    {getCompanyLabel(item.company) || "-"}
                   </td>
 
                   <td className="min-w-36 px-3 py-3 text-gray-600 dark:text-gray-300">
@@ -290,11 +315,10 @@ export default function ConfigMasterList({
 
                   <td className="whitespace-nowrap px-3 py-3">
                     <span
-                      className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                        isActive(item.active)
+                      className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium ${isActive(item.active)
                           ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300"
                           : "bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-300"
-                      }`}
+                        }`}
                     >
                       {isActive(item.active) ? "Active" : "Inactive"}
                     </span>

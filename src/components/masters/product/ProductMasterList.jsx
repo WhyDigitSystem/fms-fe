@@ -31,7 +31,7 @@ const ProductMasterList = ({ onAddNew, onEdit, onBack, refreshTrigger }) => {
   const loadProducts = async () => {
     try {
       setLoading(true);
-      const response = await productAPI.getAll(ORG_ID, BRANCH_ID);
+      const response = await productAPI.getAll(ORG_ID);
       setList(
         [...(Array.isArray(response) ? response : [])].sort(
           (a, b) => (b.id || 0) - (a.id || 0),

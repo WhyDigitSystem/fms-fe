@@ -1,5 +1,5 @@
 import React from "react";
-import { Settings2, SlidersHorizontal } from "lucide-react";
+import { Settings2, SlidersHorizontal, PlusCircle } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { hasScreenAccess } from "../../utils/accessControl";
 
@@ -10,6 +10,15 @@ const SETUP_ITEMS = [
     path: "/configuration",
     color: "blue",
     screenCode: "CONFIGURATION",
+    sadminOnly: true,
+  },
+  {
+    name: "New Entries",
+    icon: PlusCircle,
+    path: "/new-entries",
+    color: "indigo",
+    screenCode: "NEWE",
+    sadminOnly: true,
   },
 ];
 
@@ -22,6 +31,13 @@ const getColorStyles = (color) => {
       iconBg:
         "bg-blue-100 dark:bg-blue-900/40 group-hover:bg-blue-200 dark:group-hover:bg-blue-800",
     },
+    indigo: {
+      hover: "hover:bg-indigo-50 dark:hover:bg-indigo-900/30",
+      border: "hover:border-indigo-300 dark:hover:border-indigo-600",
+      text: "text-indigo-600 dark:text-indigo-400",
+      iconBg:
+        "bg-indigo-100 dark:bg-indigo-900/40 group-hover:bg-indigo-200 dark:group-hover:bg-indigo-800",
+    },
   };
 
   return colors[color] || colors.blue;
@@ -31,11 +47,15 @@ const Setup = () => {
   const navigate = useNavigate();
   const userType = localStorage.getItem("userType")?.toUpperCase();
 
+  const isSadmin = userType === "SADMIN" || userType === "SUPERADMIN";
+
   const filteredItems = SETUP_ITEMS.filter((item) => {
-    if (userType === "SADMIN" || userType === "SUPERADMIN") {
+    // SADMIN sees only sadminOnly items
+    if (isSadmin) {
       return item.sadminOnly === true;
     }
 
+    // Non-SADMIN never sees sadminOnly items
     if (item.sadminOnly) {
       return false;
     }

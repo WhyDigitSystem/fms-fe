@@ -1,10 +1,10 @@
 import apiClient from "./apiClient";
 
 export const configAPI = {
-  getAll: async (orgId, branch) => {
+  getAll: async (orgId) => {
     const res = await apiClient.get(
       "/api/basicmaster/getConfigbyOrgIdandBranch",
-      { params: { orgId, branch } },
+      { params: { orgId } },
     );
 
     return res?.paramObjectsMap?.configResponseVO ?? [];
