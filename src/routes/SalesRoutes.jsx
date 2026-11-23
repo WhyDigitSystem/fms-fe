@@ -5,6 +5,8 @@ import Booking from "../components/sales/booking/Booking";
 import JobWorkspace from "../components/sales/JobWorkspace/JobWorkspace";
 import Job from "../components/sales/JobWorkspace/Job";
 import PreJobOpeningMaster from "../components/sales/PreJobOpening/PreJobOpeningMaster";
+import Pdfformat1 from "../components/pdf/Pdfformat1";
+import Pdfformat2 from "../components/pdf/Pdfformat2";
 
 const salesRoutes = [
   {
@@ -20,9 +22,9 @@ const salesRoutes = [
     element: <Quotation />,
   },
   {
-      path: "pre-job-opening",
-      element: <PreJobOpeningMaster />,
-    },
+    path: "pre-job-opening",
+    element: <PreJobOpeningMaster />,
+  },
   {
     path: "booking",
     element: <Booking />,
@@ -30,6 +32,16 @@ const salesRoutes = [
   {
     path: "job-workspace",
     element: <Job />,
+  },
+
+  //Pdfformat1 and Pdfformat2 are used for testing purpose only, they are not part of the application
+  {
+    path: "Pdfformat1",
+    element: <Pdfformat1 />,
+  },
+  {
+    path: "Pdfformat2",
+    element: <Pdfformat2 />,
   },
 ];
 
