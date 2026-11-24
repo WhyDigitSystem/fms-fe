@@ -7,6 +7,8 @@ import Job from "../components/sales/JobWorkspace/Job";
 import PreJobOpeningMaster from "../components/sales/PreJobOpening/PreJobOpeningMaster";
 import Pdfformat1 from "../components/pdf/Pdfformat1";
 import Pdfformat2 from "../components/pdf/Pdfformat2";
+import PdfFormat3 from "../components/pdf/Pdfformat3.JS";
+import PdfFormat4 from "../components/pdf/Pdfformat4.JS";
 
 const salesRoutes = [
   {
@@ -42,6 +44,14 @@ const salesRoutes = [
   {
     path: "Pdfformat2",
     element: <Pdfformat2 />,
+  },
+  {
+    path: "Pdfformat3",
+    element: <PdfFormat3 />,
+  },
+  {
+    path: "Pdfformat4",
+    element: <PdfFormat4 />,
   },
 ];
 
