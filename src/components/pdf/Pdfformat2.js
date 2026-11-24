@@ -2,7 +2,7 @@ import { createElement as h, useEffect, useState } from "react";
 import { jsPDF } from "jspdf";
 
 /* =====================================================================
- * PDF FORMAT 2 – Air Waybill (MGL style)
+ * PDF FORMAT 2 – Air Waybill (MGL style, simple modern look)
  *
  *   buildPdfFormat2(data)    -> jsPDF document
  *   downloadPdfFormat2(data) -> saves "<AWB ref>.pdf"
@@ -11,6 +11,15 @@ import { jsPDF } from "jspdf";
  * vertical grid of the reference form ("py"), so every line / label can
  * be moved by changing one number.
  * ===================================================================== */
+
+const TITLE_2 = "Air Waybill";
+
+/* ---------- Palette (one accent, rest neutral) ---------- */
+const NAVY = [15, 39, 71];
+const ACCENT = [37, 99, 235];
+const INK = [30, 41, 59];
+const MUTED = [100, 116, 139];
+const LINE = [148, 163, 184];
 
 const L = 28;
 const W = 539;
@@ -114,8 +123,8 @@ export const DEFAULT_AWB = {
 export const buildPdfFormat2 = (data = {}) => {
   const d = { ...DEFAULT_AWB, ...data };
   const doc = new jsPDF({ unit: "pt", format: "a4" });
-  doc.setDrawColor(0, 0, 0);
-  doc.setLineWidth(0.7);
+  doc.setDrawColor(...LINE);
+  doc.setLineWidth(0.55);
 
   /* ---------- primitives ---------- */
   const ln = (u1, p1, u2, p2) => doc.line(X(u1), Y(p1), X(u2), Y(p2));
@@ -124,12 +133,12 @@ export const buildPdfFormat2 = (data = {}) => {
 
   // py = vertical centre of the text; maxW (pt) shrinks the font to fit
   const T = (s, u, py, o = {}) => {
-    const { size = 7.5, bold = false, align = "left", maxW } = o;
+    const { size = 7.5, bold = false, align = "left", maxW, color } = o;
     let fs = size;
     const str = String(s ?? "");
     doc.setFont("helvetica", bold ? "bold" : "normal");
     doc.setFontSize(fs);
-    doc.setTextColor(0, 0, 0);
+    doc.setTextColor(...(color || (size >= 9 ? INK : MUTED)));
     if (maxW) {
       while (fs > 4 && doc.getTextWidth(str) > maxW) {
         fs -= 0.2;
@@ -147,9 +156,9 @@ export const buildPdfFormat2 = (data = {}) => {
   /* ================================================================
    * Top references
    * ================================================================ */
-  T(d.houseRef, 15, 214, { size: 12, bold: true });
-  T(d.mawb, 383, 212, { size: 12 });
-  Rt(d.docNo, 985, 208, { size: 12, bold: true });
+  T(d.houseRef, 15, 214, { size: 12, bold: true, color: NAVY });
+  T(d.mawb, 383, 214, { size: 12, color: MUTED });
+  Rt(d.docNo, 985, 214, { size: 12, bold: true, color: NAVY });
 
   /* ================================================================
    * Frame & grid lines
@@ -217,7 +226,7 @@ export const buildPdfFormat2 = (data = {}) => {
   /* Issued by (right) */
   T("Not negotiable", 505, 287, { size: LAB });
   T(d.issuedByName, 665, 283, { size: 11.5 });
-  T("Air Waybill", 505, 330, { size: 15, bold: true });
+  T("Air Waybill", 505, 330, { size: 15, bold: true, color: ACCENT });
   T("Issued by", 505, 365, { size: LAB });
   T(d.issuedByAddr1, 665, 352, { size: 10.5 });
   T(d.issuedByAddr2, 665, 387, { size: 10.5 });
@@ -346,7 +355,7 @@ export const buildPdfFormat2 = (data = {}) => {
    * ================================================================ */
   T("Handling Information", 4, 1005, { size: LAB });
   d.handling.forEach((s, i) => T(s, 3, 1025 + i * 23, { size: DATA }));
-  Rt(d.ecStatus, 990, 1083, { size: 8 });
+  Rt(d.ecStatus, 990, 1083, { size: 8, bold: true, color: INK });
 
   /* ================================================================
    * Goods table header
@@ -389,7 +398,7 @@ export const buildPdfFormat2 = (data = {}) => {
     C("X", 820, py, { size: 9 });
     Rt(h, 860, py, { size: 9 });
   });
-  Rt(d.asAgreed, 676, 1441, { size: 8.5, bold: true });
+  Rt(d.asAgreed, 676, 1441, { size: 8.5, bold: true, color: INK });
   T("TOTAL CBM:", NX, 1438, { size: 9 });
   Rt(d.totalCbm, 880, 1438, { size: 9, bold: true });
   Rt(d.totalPieces, 78, 1465, { size: DATA, bold: true });
@@ -477,7 +486,7 @@ export const buildPdfFormat2 = (data = {}) => {
   hl(2040, 440, 648);
   C("Total Collect Charges", 545, 1970, { size: LAB });
 
-  T(d.docNo, 850, 1962, { size: 12, bold: true });
+  T(d.docNo, 850, 1962, { size: 12, bold: true, color: NAVY });
 
   return doc;
 };
@@ -492,9 +501,9 @@ export const downloadPdfFormat2 = (data = {}) => {
 };
 
 /* ---------------------------------------------------------------------
- * Default export: ready-to-route React component (no JSX, so a plain
- * .js file works in Vite).  <Route path="..." element={<PdfFormat2 />} />
- * Optional prop:  data = {...} to fill the form.
+ * Default export: ready-to-route React component (no JSX needed).
+ *   <Route path="..." element={<PdfFormat2 />} />
+ * Optional prop: data = {...} to fill the form.
  * ------------------------------------------------------------------- */
 const PdfFormat2 = ({ data = {} }) => {
   const [url, setUrl] = useState("");
@@ -507,36 +516,84 @@ const PdfFormat2 = ({ data = {} }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
 
+  const btn = {
+    padding: "9px 18px",
+    borderRadius: 8,
+    border: 0,
+    background: "linear-gradient(135deg,#1d4ed8,#2563eb)",
+    color: "#fff",
+    fontWeight: 600,
+    fontSize: 14,
+    cursor: "pointer",
+    boxShadow: "0 2px 6px rgba(37,99,235,.35)",
+  };
+
   return h(
     "div",
-    { style: { padding: 16 } },
+    {
+      style: {
+        minHeight: "100vh",
+        background: "#f1f5f9",
+        padding: 24,
+        fontFamily: "Inter, system-ui, sans-serif",
+      },
+    },
     h(
       "div",
-      {
-        style: { display: "flex", justifyContent: "flex-end", marginBottom: 8 },
-      },
+      { style: { maxWidth: 900, margin: "0 auto" } },
       h(
-        "button",
+        "div",
         {
-          onClick: () => downloadPdfFormat2(data),
           style: {
-            padding: "8px 16px",
-            background: "#242e43",
-            color: "#fff",
-            border: 0,
-            borderRadius: 6,
-            cursor: "pointer",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            marginBottom: 14,
           },
         },
-        "Download PDF",
+        h(
+          "div",
+          null,
+          h(
+            "div",
+            { style: { fontSize: 18, fontWeight: 700, color: "#0f2747" } },
+            TITLE_2,
+          ),
+          h(
+            "div",
+            { style: { fontSize: 12.5, color: "#64748b" } },
+            "Live preview",
+          ),
+        ),
+        h(
+          "button",
+          { onClick: () => downloadPdfFormat2(data), style: btn },
+          "Download PDF",
+        ),
+      ),
+      h(
+        "div",
+        {
+          style: {
+            background: "#fff",
+            borderRadius: 14,
+            boxShadow: "0 8px 30px rgba(15,39,71,.12)",
+            overflow: "hidden",
+          },
+        },
+        url &&
+          h("iframe", {
+            src: url,
+            title: "PDF preview",
+            style: {
+              width: "100%",
+              height: "86vh",
+              border: 0,
+              display: "block",
+            },
+          }),
       ),
     ),
-    url &&
-      h("iframe", {
-        src: url,
-        title: "PDF preview",
-        style: { width: "100%", height: "85vh", border: "1px solid #ccc" },
-      }),
   );
 };
 
