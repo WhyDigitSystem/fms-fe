@@ -24,6 +24,7 @@ import PortMaster from "../components/masters/PortMaster/PortMaster";
 import ModeMaster from "../components/masters/ModeMaster/ModeMaster";
 import Customer from "../components/masters/Customer/Customer";
 import ListMaster from "../components/masters/listofvalues/ListMaster";
+import PdfMaster from "../components/pdf/PdfMaster";
 
 const masterRoutes = [
   {
@@ -117,6 +118,10 @@ const masterRoutes = [
   {
     path: "listofvalues",
     element: <ListMaster />,
+  },
+  {
+    path: "pdf-master",
+    element: <PdfMaster />,
   },
 ];
 

@@ -30,7 +30,7 @@ const X = (u) => L + (u * W) / 1000;
 const Y = (py) => 95 + (py - 393) * 0.4;
 
 export const DEFAULT_SWB = {
-  brand: "CARGOMIND",
+  brand: "",
   logo: "", // optional data-URL; replaces the text wordmark
   title1: "Non-Negotiable",
   title2: "Combined Transport Sea Waybill",
@@ -158,54 +158,6 @@ export const buildPdfFormat3 = (data = {}) => {
   T(d.title1, LU, 303, { size: 13, bold: true, color: NAVY });
   T(d.title2, LU, 337, { size: 17, color: ACCENT });
   T(d.rulesNote, LU, 369, { size: 6.4, color: MUTED });
-
-  {
-    // logo (image if supplied, otherwise a text wordmark with a ring)
-    let drawn = false;
-    if (d.logo) {
-      try {
-        const p = doc.getImageProperties(d.logo);
-        const hh = 28;
-        const ww = (p.width / p.height) * hh;
-        doc.addImage(
-          d.logo,
-          p.fileType || "PNG",
-          X(985) - ww,
-          Y(340) - hh / 2,
-          ww,
-          hh,
-        );
-        drawn = true;
-      } catch (e) {
-        drawn = false;
-      }
-    }
-    if (!drawn) {
-      const brand = String(d.brand || "");
-      // the first "O" becomes the accent ring
-      let oi = brand.toUpperCase().indexOf("O");
-      if (oi < 1) oi = Math.floor(brand.length / 2);
-      const a = brand.slice(0, oi);
-      const b = brand.slice(oi + 1);
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(25);
-      const wa = doc.getTextWidth(a);
-      const wb = doc.getTextWidth(b);
-      const ring = 22;
-      const total = wa + ring + wb + 4;
-      const x0 = X(985) - total;
-      const by = Y(340) + 9;
-      doc.setTextColor(...NAVY);
-      doc.text(a, x0, by);
-      doc.setDrawColor(...ACCENT);
-      doc.setLineWidth(3.6);
-      doc.circle(x0 + wa + 2 + ring / 2, by - 8.5, ring / 2 - 1.8, "S");
-      doc.setTextColor(...NAVY);
-      doc.text(b, x0 + wa + ring + 4, by);
-      doc.setDrawColor(...LINE);
-      doc.setLineWidth(0.55);
-    }
-  }
 
   /* ================================================================
    * Soft panels, then frame lines

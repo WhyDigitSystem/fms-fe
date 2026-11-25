@@ -9,6 +9,8 @@ import Pdfformat1 from "../components/pdf/Pdfformat1";
 import Pdfformat2 from "../components/pdf/Pdfformat2";
 import PdfFormat3 from "../components/pdf/Pdfformat3.JS";
 import PdfFormat4 from "../components/pdf/Pdfformat4.JS";
+import PdfFormat5 from "../components/pdf/PdfFormat5";
+import PdfFormat6 from "../components/pdf/PdfFormat6";
 
 const salesRoutes = [
   {
@@ -52,6 +54,14 @@ const salesRoutes = [
   {
     path: "Pdfformat4",
     element: <PdfFormat4 />,
+  },
+  {
+    path: "Pdfformat5",
+    element: <PdfFormat5 />,
+  },
+  {
+    path: "Pdfformat6",
+    element: <PdfFormat6 />,
   },
 ];
 

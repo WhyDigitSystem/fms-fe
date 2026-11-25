@@ -4,6 +4,7 @@ import {
   ShoppingCart,
   Database,
   Settings,
+  FileText,
 } from "lucide-react";
 import { useDispatch, useSelector } from "react-redux";
 import { NavLink } from "react-router-dom";
@@ -51,6 +52,13 @@ const Sidebar = () => {
       color: "slate",
       screenCode: "SETUP",
       sadminOnly: true,
+    },
+    {
+      name: "PDF Master",
+      href: "/pdf-master",
+      icon: FileText,
+      color: "slate",
+      screenCode: "PDFMASTER",
     },
   ];
 
