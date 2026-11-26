@@ -39,6 +39,7 @@ import {
 import BookingAPI from "../../../api/sales/bookingAPI";
 import EnquiryAPI from "../../../api/sales/enquiryAPI";
 import PreJobAPI from "../../../api/sales/preJobAPI";
+import QuotationAPI from "../../../api/sales/quotationAPI";
 
 /* ------------------------------------------------------------------ */
 /* Tokens                                                              */
@@ -185,9 +186,11 @@ const portLabel = (p) => {
     if (p == null || p === "") return "";
     if (typeof p === "string" || typeof p === "number") return String(p);
     if (typeof p === "object") {
+        const city = p.city?.city || "";
         const name = p.portName || p.city || "";
         const code = p.portCode ? ` (${p.portCode})` : "";
-        return `${name}${code}`.trim();
+        // ✅ prefer city for display labels
+        return `${city || name}${code}`.trim();
     }
     return "";
 };
@@ -741,6 +744,8 @@ const emptyForm = () => ({
     quotationRef: "",
     expectedShipmentDate: "",
     remarks: "",
+    quotationId: "",
+    quotationRef: "",
     cargoLines: [emptyCargoLine()],
     attachments: [],
     audit: [],
@@ -784,6 +789,10 @@ const PreJobOpeningForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
 
     const [loadingDocId, setLoadingDocId] = useState(false);
 
+    /* ✅ Quotations fetched from API when operationStartUp === "Direct" */
+    const [quotationRecords, setQuotationRecords] = useState([]);
+    const [quotationLoading, setQuotationLoading] = useState(false);
+
     /* ✅ Fetch Pre-Job By ID on Edit */
     useEffect(() => {
         if (!editData?.id) return;
@@ -820,6 +829,8 @@ const PreJobOpeningForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
                     preJobNo: record.docId || "",
                     bookingRef: record.bookingNo || "",
                     bookingDate: isoToDisplay(record.bookingDate || ""),
+                    quotationId: record.quotationId ? String(record.quotationId) : "",
+                    quotationRef: record.quotationNo || "",
                     shipmentType: record.tradeType || "Export",
                     mode: record.mode || "Air",
                     customer: record.customer || "",
@@ -909,6 +920,29 @@ const PreJobOpeningForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
         run();
     }, [isDirect, orgId, branchId]);
 
+    useEffect(() => {
+        if (!isDirect) return;
+        const run = async () => {
+            try {
+                setQuotationLoading(true);
+                const res = await QuotationAPI.getQuotationByOrgIdAndBranch(
+                    branchId,
+                    orgId,
+                );
+                setQuotationRecords(Array.isArray(res) ? res : []);
+            } catch (err) {
+                console.error("Failed to load quotations:", err);
+                setNotice({
+                    type: "error",
+                    text: "Unable to load quotations. Please try again.",
+                });
+            } finally {
+                setQuotationLoading(false);
+            }
+        };
+        run();
+    }, [isDirect, branchId, orgId]);
+
     const bookingOptions = useMemo(
         () =>
             bookingRecords.map((b) => {
@@ -927,13 +961,36 @@ const PreJobOpeningForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
         [bookingRecords],
     );
 
+    const quotationOptions = useMemo(
+        () =>
+            quotationRecords.map((q) => ({
+                value: String(q.id),
+                label: q.docId || `Quotation ${q.id}`,
+                sub: [
+                    q.companyName,
+                    q.movement,
+                    q.shipmentMode,
+                    q.originPort?.portName,
+                    q.destinationPort?.portName,
+                ]
+                    .filter(Boolean)
+                    .join(" · "),
+            })),
+        [quotationRecords],
+    );
+
     const portOptions = useMemo(() => {
         const modeUpper = String(form.mode || "").trim().toUpperCase();
         return ports
             .filter((p) => String(p?.portType || "").trim().toUpperCase() === modeUpper)
             .map((p) => ({
                 value: String(p.id),
-                label: `${p.portName}${p.portCode ? ` (${p.portCode})` : ""}`,
+                // ✅ Show CITY in the dropdown (Origin/Destination)
+                label: p.city?.city
+                    ? `${p.city.city}${p.portCode ? ` (${p.portCode})` : ""}`
+                    : `${p.portName}${p.portCode ? ` (${p.portCode})` : ""}`,
+                // keep sub info so user can still see the port name in the dropdown
+                sub: p.portName || "",
             }));
     }, [ports, form.mode]);
 
@@ -1095,6 +1152,138 @@ const PreJobOpeningForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
         });
     };
 
+    const applyQuotation = (quotationId) => {
+        const q = quotationRecords.find((x) => String(x.id) === String(quotationId));
+
+        if (!q) {
+            // clearing the selection — just reset the ref, keep fields editable
+            setForm((p) => ({
+                ...p,
+                quotationId: "",
+                quotationRef: quotationId || "",
+            }));
+            return;
+        }
+
+        // ---- map shipment mode
+        const rawMode = String(q.shipmentMode || "").toUpperCase();
+        const matchedMode =
+            modes.find((m) => m.apiValue === rawMode) ||
+            modes.find((m) => m.value.toUpperCase() === rawMode);
+        const resolvedMode = matchedMode?.value || form.mode;
+
+        // ---- customer (first customerInformation entry)
+        const cust = q.customerInformation?.[0] || {};
+
+        // ---- ports
+        const originPortObj = q.originPort || null;
+        const destPortObj = q.destinationPort || null;
+
+        // origin/destination LABEL should prefer city (same rule as handleOriginChange)
+        const originCity = q.originCity?.city || "";
+        const destCity = q.destinationCity?.city || "";
+        const originCode = originPortObj?.portCode || "";
+        const destCode = destPortObj?.portCode || "";
+        const originLabel = originCity
+            ? `${originCity}${originCode ? ` (${originCode})` : ""}`
+            : portLabel(originPortObj);
+        const destLabel = destCity
+            ? `${destCity}${destCode ? ` (${destCode})` : ""}`
+            : portLabel(destPortObj);
+
+        // ---- cargo / shipping
+        const ship = q.shippingDetails?.[0] || {};
+        const totalQty = Number(ship.quantity) || 0;
+        const totalGross = Number(ship.grossWeight) || 0;
+        const totalVolume = Number(ship.totalVolumeCbm) || 0;
+
+        const cargoLines =
+            q.shippingDetails && q.shippingDetails.length
+                ? q.shippingDetails.map((s, i) => ({
+                    id: `${Date.now()}-${i}`,
+                    description: s.cargoDescription || "",
+                    hsCode: "",
+                    packages:
+                        s.quantity != null ? String(s.quantity) : "",
+                    weight:
+                        s.grossWeight != null ? String(s.grossWeight) : "",
+                    volume:
+                        s.totalVolumeCbm != null ? String(s.totalVolumeCbm) : "",
+                    remarks: "",
+                }))
+                : [emptyCargoLine()];
+
+        setForm((p) => ({
+            ...p,
+            // ---- references
+            quotationId: String(q.id),
+            quotationRef: q.docId || `Quotation ${q.id}`,
+
+            // ---- header fields
+            shipmentType:
+                String(q.movement || "").toLowerCase() === "import"
+                    ? "Import"
+                    : "Export",
+            mode: resolvedMode,
+
+            // ---- parties
+            customer: cust.customerName || q.companyName || p.customer,
+            salesPerson: q.agentName || p.salesPerson,
+            // quotation's customerInformation only has customer + agent,
+            // so leave shipper/consignee alone unless you have data for them
+            shipper: p.shipper,
+            consignee: p.consignee,
+
+            // ---- routing
+            origin: portId(originPortObj) || p.origin,
+            originLabel: originLabel || p.originLabel,
+            destination: portId(destPortObj) || p.destination,
+            destinationLabel: destLabel || p.destinationLabel,
+            pol: originPortObj?.portName || p.pol,
+            pod: destPortObj?.portName || p.pod,
+
+            // ---- cargo totals
+            commodity:
+                ship.cargoDescription || p.commodity,
+            packages: totalQty ? String(totalQty) : p.packages,
+            grossWeight: totalGross
+                ? totalGross.toLocaleString(undefined, {
+                    minimumFractionDigits: 3,
+                    maximumFractionDigits: 3,
+                })
+                : p.grossWeight,
+            volume: totalVolume
+                ? totalVolume.toLocaleString(undefined, {
+                    minimumFractionDigits: 3,
+                    maximumFractionDigits: 3,
+                })
+                : p.volume,
+
+            // ---- remarks
+            remarks: q.remarks || p.remarks,
+
+            // ---- lines
+            cargoLines,
+        }));
+
+        setNotice({
+            type: "success",
+            text: `Quotation ${q.docId || q.id} applied to the pre-job.`,
+        });
+    };
+
+    const handleQuotationRefChange = (value) => {
+        if (!value) {
+            setForm((p) => ({
+                ...p,
+                quotationId: "",
+                quotationRef: "",
+            }));
+            return;
+        }
+        applyQuotation(value);
+    };
+
     const handleBookingRefChange = (value) => {
         if (isBookingBased) {
             applyBooking(value);
@@ -1109,7 +1298,13 @@ const PreJobOpeningForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
         setForm((prev) => ({
             ...prev,
             origin: value,
-            originLabel: p ? `${p.portName}${p.portCode ? ` (${p.portCode})` : ""}` : "",
+            // ✅ label shows CITY
+            originLabel: p
+                ? p.city?.city
+                    ? `${p.city.city}${p.portCode ? ` (${p.portCode})` : ""}`
+                    : `${p.portName}${p.portCode ? ` (${p.portCode})` : ""}`
+                : "",
+            // ✅ POL keeps the PORT NAME
             pol: p ? p.portName : prev.pol,
         }));
     };
@@ -1119,7 +1314,13 @@ const PreJobOpeningForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
         setForm((prev) => ({
             ...prev,
             destination: value,
-            destinationLabel: p ? `${p.portName}${p.portCode ? ` (${p.portCode})` : ""}` : "",
+            // ✅ label shows CITY
+            destinationLabel: p
+                ? p.city?.city
+                    ? `${p.city.city}${p.portCode ? ` (${p.portCode})` : ""}`
+                    : `${p.portName}${p.portCode ? ` (${p.portCode})` : ""}`
+                : "",
+            // ✅ POD keeps the PORT NAME
             pod: p ? p.portName : prev.pod,
         }));
     };
@@ -1235,13 +1436,19 @@ const PreJobOpeningForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
     const originDisplay = useMemo(() => {
         if (!isDirect) return form.origin;
         const p = ports.find((x) => String(x.id) === String(form.origin));
-        return p ? `${p.portName}${p.portCode ? ` (${p.portCode})` : ""}` : form.originLabel || "";
+        if (!p) return form.originLabel || "";
+        return p.city?.city
+            ? `${p.city.city}${p.portCode ? ` (${p.portCode})` : ""}`
+            : `${p.portName}${p.portCode ? ` (${p.portCode})` : ""}`;
     }, [isDirect, ports, form.origin, form.originLabel]);
 
     const destinationDisplay = useMemo(() => {
         if (!isDirect) return form.destination;
         const p = ports.find((x) => String(x.id) === String(form.destination));
-        return p ? `${p.portName}${p.portCode ? ` (${p.portCode})` : ""}` : form.destinationLabel || "";
+        if (!p) return form.destinationLabel || "";
+        return p.city?.city
+            ? `${p.city.city}${p.portCode ? ` (${p.portCode})` : ""}`
+            : `${p.portName}${p.portCode ? ` (${p.portCode})` : ""}`;
     }, [isDirect, ports, form.destination, form.destinationLabel]);
 
     const summaryRows = useMemo(
@@ -1255,7 +1462,12 @@ const PreJobOpeningForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
 
     const modeIcon = modes.find((m) => m.value === form.mode)?.icon || Plane;
 
-    const isLocked = isBookingBased && !!form.bookingId;
+    const isLocked =
+        (isBookingBased && !!form.bookingId) ||
+        (isDirect && !!form.quotationId);
+
+    const isLock =
+        (isBookingBased && !!form.bookingId)
 
     return (
         <div className="flex h-screen w-full flex-col overflow-hidden bg-slate-50 text-slate-900 dark:bg-gray-950 dark:text-gray-100">
@@ -1451,14 +1663,14 @@ const PreJobOpeningForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
                                             value={form.shipper}
                                             onChange={(v) => set("shipper", v)}
                                             placeholder="Shipper"
-                                            disabled={isLocked}
+                                            disabled={isLock}
                                         />
                                         <TextField
                                             label="Consignee"
                                             value={form.consignee}
                                             onChange={(v) => set("consignee", v)}
                                             placeholder="Consignee"
-                                            disabled={isLocked}
+                                            disabled={isLock}
                                         />
                                     </div>
                                 </div>
@@ -1476,7 +1688,7 @@ const PreJobOpeningForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
                                 }
                             >
                                 <div className="grid grid-cols-2 gap-2">
-                                    {/* Pre-Job Number */}
+                                    {/* Pre-Job Number — always shown */}
                                     <TextField
                                         label="Pre-Job Number"
                                         value={form.preJobNo || ""}
@@ -1485,51 +1697,97 @@ const PreJobOpeningForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
                                         className="col-span-2 sm:col-span-1"
                                     />
 
-                                    {isBookingBased ? (
+                                    {/* ---- Booking-based : Booking Reference + Date (existing behaviour) ---- */}
+                                    {isBookingBased && (
+                                        <>
+                                            <SearchableSelectField
+                                                label="Booking Reference"
+                                                value={form.bookingId || ""}
+                                                onChange={handleBookingRefChange}
+                                                options={bookingOptions}
+                                                placeholder={
+                                                    bookingLoading
+                                                        ? "Loading bookings..."
+                                                        : bookingOptions.length
+                                                            ? "Search booking"
+                                                            : "No bookings available"
+                                                }
+                                                disabled={bookingLoading || !bookingOptions.length}
+                                                fallbackLabel={form.bookingRef}
+                                                className="col-span-2 sm:col-span-1"
+                                            />
+                                            <DatePickerField
+                                                label="Booking Date"
+                                                value={form.bookingDate}
+                                                onChange={(v) => set("bookingDate", v)}
+                                                disabled={isLocked}
+                                            />
+                                        </>
+                                    )}
+
+                                    {/* ---- Direct : Quotation Reference dropdown ---- */}
+                                    {isDirect && (
                                         <SearchableSelectField
-                                            label="Booking Reference"
-                                            value={form.bookingId || ""}
-                                            onChange={handleBookingRefChange}
-                                            options={bookingOptions}
+                                            label="Quotation Reference"
+                                            value={form.quotationId || ""}
+                                            onChange={handleQuotationRefChange}
+                                            options={quotationOptions}
                                             placeholder={
-                                                bookingLoading
-                                                    ? "Loading bookings..."
-                                                    : bookingOptions.length
-                                                        ? "Search booking"
-                                                        : "No bookings available"
+                                                quotationLoading
+                                                    ? "Loading quotations..."
+                                                    : quotationOptions.length
+                                                        ? "Search quotation"
+                                                        : "No quotations available"
                                             }
-                                            disabled={bookingLoading || !bookingOptions.length}
-                                            fallbackLabel={form.bookingRef}
-                                            className="col-span-2 sm:col-span-1"
-                                        />
-                                    ) : (
-                                        <TextField
-                                            label="Booking Reference"
-                                            value={form.bookingRef}
-                                            onChange={handleBookingRefChange}
-                                            placeholder="Enter reference"
+                                            disabled={quotationLoading}
+                                            fallbackLabel={form.quotationRef}
                                             className="col-span-2 sm:col-span-1"
                                         />
                                     )}
 
-                                    <DatePickerField
-                                        label="Booking Date"
-                                        value={form.bookingDate}
-                                        onChange={(v) => set("bookingDate", v)}
-                                        disabled={isLocked}
-                                    />
-                                    <TextField
-                                        label="Quotation Reference"
-                                        value={form.quotationRef}
-                                        onChange={(v) => set("quotationRef", v)}
-                                        placeholder="Quotation ref"
-                                        disabled={isLocked}
-                                    />
+                                    {/* ---- If neither, still allow typing the ref manually ---- */}
+                                    {!isBookingBased && !isDirect && (
+                                        <>
+                                            <TextField
+                                                label="Booking Reference"
+                                                value={form.bookingRef}
+                                                onChange={handleBookingRefChange}
+                                                placeholder="Enter reference"
+                                                className="col-span-2 sm:col-span-1"
+                                            />
+                                            <DatePickerField
+                                                label="Booking Date"
+                                                value={form.bookingDate}
+                                                onChange={(v) => set("bookingDate", v)}
+                                            />
+                                        </>
+                                    )}
+
+                                    {/* ---- Remaining fields — visible in ALL modes, always editable in Direct ---- */}
+                                    {isBookingBased && (
+                                        <TextField
+                                            label="Quotation Reference"
+                                            value={form.quotationRef}
+                                            onChange={(v) => set("quotationRef", v)}
+                                            placeholder="Quotation ref"
+                                            disabled={isLocked}
+                                        />
+                                    )}
+
+                                    {isBookingBased && (
+                                        <>
+                                            <DatePickerField
+                                                label="Booking Date"
+                                                value={form.bookingDate}
+                                                onChange={(v) => set("bookingDate", v)}
+                                            />
+                                        </>
+                                    )}
+
                                     <DatePickerField
                                         label="Expected Shipment"
                                         value={form.expectedShipmentDate}
                                         onChange={(v) => set("expectedShipmentDate", v)}
-                                    // disabled={isLocked}
                                     />
                                 </div>
                             </Section>

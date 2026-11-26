@@ -189,6 +189,13 @@ const MASTERS = [
     color: "teal",
     screenCode: "LOV",
   },
+  {
+    name: "Incoterms",
+    icon: Tag,
+    path: "/incoterms",
+    color: "slate",
+    screenCode: "INC",
+  },
 ];
 
 // Business Master contains only these items
@@ -198,6 +205,7 @@ const BUSINESS_MASTER_NAMES = [
   "Port",
   "Mode",
   "Customer",
+  "Incoterms",
 ];
 
 // Split the master items into two sections

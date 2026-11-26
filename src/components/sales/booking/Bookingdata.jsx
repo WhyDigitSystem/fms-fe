@@ -717,9 +717,6 @@ export const validateBooking = (f, action = "draft", ports = []) => {
   const svc = getService(f.mode, f.serviceType);
   const cust = customers.find((c) => c.id === f.customer);
 
-  const hasReefer =
-    f.cargoLines.some((l) => l.reefer === "Yes") || !!svc?.reefer;
-
   const door = f.pickupRequired || f.deliveryRequired;
 
   /* ---- Always (Save Draft and Submit) ---- */
@@ -966,14 +963,6 @@ export const validateBooking = (f, action = "draft", ports = []) => {
         "equipment"
       );
     }
-  }
-
-  if (hasReefer && f.equipment.reeferTemp === "") {
-    add(
-      "equipment.reeferTemp",
-      "Reefer temperature is required for reefer cargo",
-      "equipment"
-    );
   }
 
   if (POLICY.requireFreightTermsOnSubmit && !f.commercial.freightTerms) {
