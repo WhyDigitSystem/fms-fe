@@ -901,7 +901,7 @@ const PreJobOpeningForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
     }, [isBookingBased, branchId, orgId]);
 
     useEffect(() => {
-        if (!isDirect) return;
+        if (!isDirect && !isBookingBased) return;
         const run = async () => {
             try {
                 setPortsLoading(true);
@@ -909,16 +909,13 @@ const PreJobOpeningForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
                 setPorts(Array.isArray(res) ? res : []);
             } catch (err) {
                 console.error("Failed to load ports:", err);
-                setNotice({
-                    type: "error",
-                    text: "Unable to load ports. Please try again.",
-                });
+                setNotice({ type: "error", text: "Unable to load ports. Please try again." });
             } finally {
                 setPortsLoading(false);
             }
         };
         run();
-    }, [isDirect, orgId, branchId]);
+    }, [isDirect, isBookingBased, orgId, branchId]);
 
     useEffect(() => {
         if (!isDirect) return;
@@ -1059,6 +1056,27 @@ const PreJobOpeningForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
         const originPortObj = routing.origin || routing.originPort;
         const destPortObj = routing.destination || routing.destinationPort;
 
+        /* --------------------------------------------------------------
+           Routing helpers — keep label (city) and POL/POD (port name)
+           in sync with handleOriginChange / handleDestinationChange
+        -------------------------------------------------------------- */
+        const buildCityLabel = (port) => {
+            if (!port) return "";
+            if (typeof port === "string") return port;
+            const city = port.city?.city || port.city || "";
+            const name = city || port.portName || "";
+            const code = port.portCode ? ` (${port.portCode})` : "";
+            return `${name}${code}`.trim();
+        };
+
+        const originLabel = buildCityLabel(originPortObj);
+        const destLabel = buildCityLabel(destPortObj);
+        const originPol = originPortObj?.portName || "";
+        const destPod = destPortObj?.portName || "";
+
+        /* --------------------------------------------------------------
+           Cargo lines
+        -------------------------------------------------------------- */
         const cargoLines = (b.cargoDetails || []).map((c, i) => ({
             id: `${Date.now()}-${i}`,
             description: c.commodityDescription || "",
@@ -1070,6 +1088,9 @@ const PreJobOpeningForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
             remarks: c.remarks || "",
         }));
 
+        /* --------------------------------------------------------------
+           Attachments
+        -------------------------------------------------------------- */
         const attachments = (b.instructionDetails || [])
             .filter((d) => d.document)
             .map((d) => ({
@@ -1083,6 +1104,9 @@ const PreJobOpeningForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
                 isExisting: true,
             }));
 
+        /* --------------------------------------------------------------
+           Totals
+        -------------------------------------------------------------- */
         const totalPackages = (b.cargoDetails || []).reduce(
             (sum, c) => sum + (Number(c.packageCount) || 0),
             0,
@@ -1098,6 +1122,9 @@ const PreJobOpeningForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
 
         const primaryCommodity = b.cargoDetails?.[0]?.commodityDescription || "";
 
+        /* --------------------------------------------------------------
+           Apply to form
+        -------------------------------------------------------------- */
         setForm((p) => ({
             ...p,
             bookingId: String(b.id),
@@ -1114,12 +1141,16 @@ const PreJobOpeningForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
             shipper: party.shipper || p.shipper,
             consignee: party.consignee || p.consignee,
 
+            /* ---- routing ---- */
+            // id kept for save payload
             origin: portId(originPortObj) || p.origin,
-            originLabel: portLabel(originPortObj) || p.originLabel,
             destination: portId(destPortObj) || p.destination,
-            destinationLabel: portLabel(destPortObj) || p.destinationLabel,
-            pol: plainText(originPortObj) || p.pol,
-            pod: plainText(destPortObj) || p.pod,
+            // city label for the visible field
+            originLabel: originLabel || p.originLabel,
+            destinationLabel: destLabel || p.destinationLabel,
+            // port name for POL / POD
+            pol: originPol || p.pol,
+            pod: destPod || p.pod,
 
             quotationRef:
                 b.quotationNo || commercial.quotationReference || p.quotationRef,
@@ -1839,16 +1870,16 @@ const PreJobOpeningForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
                                             <TextField
                                                 label="Origin"
                                                 required
-                                                value={form.origin}
-                                                onChange={(v) => set("origin", v)}
+                                                value={form.originLabel || form.origin}
+                                                onChange={(v) => set("originLabel", v)}
                                                 placeholder="Origin city"
                                                 disabled={isLocked}
                                             />
                                             <TextField
                                                 label="Destination"
                                                 required
-                                                value={form.destination}
-                                                onChange={(v) => set("destination", v)}
+                                                value={form.destinationLabel || form.destination}
+                                                onChange={(v) => set("destinationLabel", v)}
                                                 placeholder="Destination city"
                                                 disabled={isLocked}
                                             />
