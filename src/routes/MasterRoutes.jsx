@@ -25,6 +25,7 @@ import ModeMaster from "../components/masters/ModeMaster/ModeMaster";
 import Customer from "../components/masters/Customer/Customer";
 import ListMaster from "../components/masters/listofvalues/ListMaster";
 import PdfMaster from "../components/pdf/PdfMaster";
+import Incoterms from "../components/masters/Incoterms/Incoterms";
 
 const masterRoutes = [
   {
@@ -114,6 +115,10 @@ const masterRoutes = [
   {
     path: "customer",
     element: <Customer />,
+  },
+  {
+    path: "incoterms",
+    element: <Incoterms />,
   },
   {
     path: "listofvalues",

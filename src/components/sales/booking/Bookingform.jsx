@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -68,8 +68,10 @@ import {
 } from "./bookingData";
 import BookingAPI from "../../../api/sales/bookingAPI";
 import QuotationAPI from "../../../api/sales/quotationAPI";
+import PreJobAPI from "../../../api/sales/preJobAPI"; // ✅ Added PreJobAPI
 import currencyAPI from "../../../api/currencyAPI";
 import EnquiryAPI from "../../../api/sales/enquiryAPI";
+import IncotermsAPI from "../../../api/IncotermsAPI";
 
 /* ------------------------------------------------------------------ */
 /* Styling tokens                                                      */
@@ -247,13 +249,7 @@ const TextField = ({
   className,
   ...rest
 }) => (
-  <Field
-    label={label}
-    required={required}
-    error={error}
-    hint={hint}
-    className={className}
-  >
+  <Field label={label} required={required} error={error} hint={hint} className={className}>
     <input
       type={type}
       min={type === "number" ? 0 : undefined}
@@ -335,13 +331,7 @@ const SelectField = ({
   disabled,
   className,
 }) => (
-  <Field
-    label={label}
-    required={required}
-    error={error}
-    hint={hint}
-    className={className}
-  >
+  <Field label={label} required={required} error={error} hint={hint} className={className}>
     <div className="relative">
       <select
         value={value ?? ""}
@@ -367,7 +357,6 @@ const SelectField = ({
   </Field>
 );
 
-/* ✅ Searchable combobox */
 const SearchableSelectField = ({
   label,
   required,
@@ -861,9 +850,14 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
   const [quotationRecords, setQuotationRecords] = useState([]);
   const [quotationLoading, setQuotationLoading] = useState(false);
 
+  const [preJobRecords, setPreJobRecords] = useState([]);
+  const [preJobLoading, setPreJobLoading] = useState(false);
+
   /* ✅ currency master list */
   const [currencyList, setCurrencyList] = useState([]);
   const [ports, setPorts] = useState([]);
+
+  const [incotermList, setIncotermList] = useState([]);
 
   const savedRef = useRef(initial);
   const baselineRef = useRef(snapshot(initial));
@@ -876,6 +870,13 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
   const branchId = parseInt(localStorage.getItem("branchId")) || orgId;
   const loginUserName = localStorage.getItem("userName") || "SYSTEM";
 
+  const operationStartUp = useMemo(() => {
+    const val = localStorage.getItem("operationStartUp") || "";
+    return String(val).trim().toLowerCase();
+  }, []);
+  const isDirect = operationStartUp === "direct";
+  const isBookingBased = operationStartUp === "booking-based";
+
   /* ---------- derived ---------- */
   const svc = getService(form.mode, form.serviceType);
   const customer = customers.find((c) => c.id === form.customer);
@@ -883,7 +884,6 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
   const hasReefer =
     form.cargoLines.some((l) => l.reefer === "Yes") || !!svc?.reefer;
   const needsEquipment = !!svc?.equipment;
-  const showEquipment = needsEquipment || hasReefer;
   const totals = useMemo(
     () => computeTotals(form.cargoLines),
     [form.cargoLines],
@@ -894,16 +894,11 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
   );
   const dirty = snapshot(form) !== baselineRef.current;
 
-  const isFlowBooking = form.bookingSource === "Flow";
-
   const sections = [
     { id: "details", title: "Booking Details", icon: ClipboardList },
     { id: "routing", title: "Routing & Schedule", icon: MapPin },
     { id: "parties", title: "Parties", icon: Users },
     { id: "cargo", title: "Cargo Details", icon: Box },
-    ...(showEquipment
-      ? [{ id: "equipment", title: "Equipment Details", icon: Package }]
-      : []),
     { id: "commercial", title: "Commercial", icon: DollarSign },
     { id: "documents", title: "Documents & Instructions", icon: FileText },
   ];
@@ -938,6 +933,16 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
         sub: q.docDate ? isoToDisplay(q.docDate) : undefined,
       })),
     [quotationRecords],
+  );
+
+  const preJobOptions = useMemo(
+    () =>
+      preJobRecords.map((p) => ({
+        value: String(p.id),
+        label: p.docId || `Pre-Job ${p.id}`,
+        sub: p.docDate ? isoToDisplay(p.docDate) : undefined,
+      })),
+    [preJobRecords],
   );
 
   const currencyOptions = useMemo(
@@ -1070,7 +1075,12 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
       try {
         setLoadingDocId(true);
         const docId = await BookingAPI.getBookingDocId(orgId);
-        setForm((p) => ({ ...p, bookingNo: docId || "" }));
+        setForm((p) => ({
+          ...p,
+          bookingNo: docId || "",
+          // ✅ Ensure bookingDate defaults to today if empty
+          bookingDate: p.bookingDate || isoToDisplay(todayIso()),
+        }));
       } catch (err) {
         console.error("Failed to fetch booking docId:", err);
       } finally {
@@ -1107,12 +1117,10 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
         const equipment = record.equipmentDetails?.[0] || {};
         const instruction = record.instructionDetails?.[0] || {};
 
-        // ✅ API returns origin/destination as objects (or ids); resolve both id + label
         const originPortObj = routing.origin ?? routing.originPort;
         const destinationPortObj =
           routing.destination ?? routing.destinationPort;
 
-        // ✅ API returns customer as a name string; try to match to a known customer
         const custName = record.customer || "";
         const matchedCustomer = customers.find(
           (c) =>
@@ -1140,18 +1148,17 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
           remarks: c.remarks || "",
         }));
 
-        // ✅ Preserve server-side fields so we can echo them back on save
         const existingFiles = (record.instructionDetails || [])
           .filter((d) => d.document)
           .map((d) => ({
-            id: uid(),                                    // local UI id
-            serverId: d.id,                               // ✅ server id
-            serverFileName: d.fileName,                   // ✅ server file name
+            id: uid(),
+            serverId: d.id,
+            serverFileName: d.fileName,
             name: d.originalName || d.fileName || "Document",
             originalName: d.originalName || d.fileName || "Document",
             size: d.fileSize || 0,
             category: d.documentType || DOC_CATEGORIES[0],
-            url: d.document,                              // ✅ URL to resend
+            url: d.document,
             file: null,
             isExisting: true,
             uploadedOn: d.uploadOn || null,
@@ -1161,17 +1168,22 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
         setForm({
           id: record.id,
           bookingNo: record.docId || "",
-          bookingDate: isoToDisplay(record.docDate || today()),
+          bookingDate: isoToDisplay(record.docDate || todayIso()),
           branch: record.branch?.branchCode || CURRENT_USER.branch,
           status: record.bookingStatus || "Draft",
           bookingType: record.bookingType || "Export",
           bookingSource: record.type,
+
+          // ✅ Set both ID (empty) and DocId (for fallback label) from the API
+          prejobOpening: "",
+          preJobRef: record.prejobOpening || "",
+
           quotationNo: record.quotationNo || "",
+          quotationDocId: record.quotationNo || "",
           quotationDate: isoToDisplay(record.quotationDate || ""),
           mode: record.transportMode || "Sea",
           serviceType: record.serviceType || "",
 
-          // ✅ customer: keep both the id (if matched) and the display name
           customer: matchedCustomer?.id || custName,
           customerDisplayName: custName,
           customerRef: record.customerReference || "",
@@ -1182,7 +1194,6 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
           deliveryRequired: !!routing.placeOfDelivery,
           placeOfReceipt: routing.placeOfReceipt || "",
 
-          // ✅ origin/destination: id + label so the field shows a value immediately
           origin: portId(originPortObj),
           originLabel: portLabel(originPortObj),
           destination: portId(destinationPortObj),
@@ -1263,25 +1274,58 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editData?.id, currencyList.length]);
 
-  /* ---------- Fetch quotations when Flow chosen ---------- */
+  /* ---------- Fetch Quotations or Pre-Jobs based on mode ---------- */
   useEffect(() => {
-    if (!isFlowBooking || quotationRecords.length) return;
-    const run = async () => {
-      try {
-        setQuotationLoading(true);
-        const res = await QuotationAPI.getQuotationByOrgIdAndBranch(
-          branchId,
-          orgId,
-        );
-        setQuotationRecords(Array.isArray(res) ? res : []);
-      } catch (err) {
-        console.error("Failed to load quotations:", err);
-      } finally {
-        setQuotationLoading(false);
-      }
-    };
-    run();
-  }, [isFlowBooking, quotationRecords.length, branchId, orgId]);
+    if (isBookingBased && !quotationRecords.length) {
+      const run = async () => {
+        try {
+          setQuotationLoading(true);
+          const res = await QuotationAPI.getQuotationByOrgIdAndBranch(
+            branchId,
+            orgId,
+          );
+          setQuotationRecords(Array.isArray(res) ? res : []);
+        } catch (err) {
+          console.error("Failed to load quotations:", err);
+        } finally {
+          setQuotationLoading(false);
+        }
+      };
+      run();
+    }
+
+    if (isDirect && !preJobRecords.length) {
+      const run = async () => {
+        try {
+          setPreJobLoading(true);
+          const res = await PreJobAPI.getPreJobByOrgIdAndBranch(branchId, orgId);
+          setPreJobRecords(Array.isArray(res) ? res : []);
+        } catch (err) {
+          console.error("Failed to load pre-jobs:", err);
+        } finally {
+          setPreJobLoading(false);
+        }
+      };
+      run();
+    }
+  }, [isBookingBased, isDirect, quotationRecords.length, preJobRecords.length, branchId, orgId]);
+
+  const fetchIncoterms = useCallback(async () => {
+    try {
+      const rows = await IncotermsAPI.getIncotermsByOrgId(orgId);
+      // Only keep active, non-cancelled rows
+      const active = (Array.isArray(rows) ? rows : []).filter(
+        (r) => r?.active === "Active" && r?.cancel !== "T",
+      );
+      setIncotermList(active);
+    } catch (error) {
+      console.error("Failed to load Incoterms:", error);
+    }
+  }, [orgId]);
+
+  useEffect(() => {
+    fetchIncoterms();
+  }, [fetchIncoterms]);
 
   /* ---------- helpers ---------- */
   const scrollToSection = (id) => {
@@ -1415,17 +1459,6 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
     clearErr((k) => ["branch", "customer"].includes(k));
   };
 
-  const changeBookingSource = (source) => {
-    if (source === form.bookingSource) return;
-    setForm((p) => ({
-      ...p,
-      bookingSource: source,
-      quotationNo: "",
-      quotationDate: "",
-    }));
-    setErrorList([]);
-  };
-
   /* ---------- Apply a quotation → fill the booking ---------- */
   const applyQuotation = (quotationId) => {
     const q = quotationRecords.find((x) => String(x.id) === String(quotationId));
@@ -1446,19 +1479,15 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
 
     const resolvePort = (value) => {
       if (!value) return null;
-
       const rawId = plainId(value);
-
       const rawCode =
         typeof value === "object"
           ? String(value.portCode || "").trim().toUpperCase()
           : String(value).trim().toUpperCase();
-
       const rawName =
         typeof value === "object"
           ? String(value.portName || "").trim().toUpperCase()
           : "";
-
       return ports.find(
         (p) =>
           String(p.id) === rawId ||
@@ -1469,14 +1498,12 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
     };
 
     const originPort = resolvePort(q.originPort || q.originTerminal);
-
     const destinationPort = resolvePort(
       q.destinationPort || q.destinationTerminal
     );
 
     const originTerminalId =
       originPort?.id || plainId(q.originPort || q.originTerminal);
-
     const destinationTerminalId =
       destinationPort?.id ||
       plainId(q.destinationPort || q.destinationTerminal);
@@ -1513,7 +1540,6 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
     const ct = q.commercialTerms?.[0] || {};
     const qCurrencyCode = plainText(q.currency);
 
-    // ✅ Resolve port labels from the quotation so the fields show a value
     const originLabelText = portLabel(q.originPort || q.originTerminal);
     const destinationLabelText = portLabel(
       q.destinationPort || q.destinationTerminal,
@@ -1523,7 +1549,7 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
       ...p,
       bookingSource: "Flow",
       quotationNo: String(q.id),
-      quotationDocId: q.docId || "", 
+      quotationDocId: q.docId || "",
       quotationDate: isoToDisplay(q.docDate),
 
       mode,
@@ -1566,6 +1592,78 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
     setNotice({
       type: "success",
       text: `Quotation ${q.docId || q.id} applied to the booking.`,
+    });
+  };
+
+  /* ---------- Apply a Pre-Job → fill the booking ---------- */
+  const applyPreJob = (prejobOpening) => {
+    const pj = preJobRecords.find((x) => String(x.id) === String(prejobOpening));
+    if (!pj) {
+      setForm((p) => ({ ...p, prejobOpening, preJobRef: "" }));
+      return;
+    }
+
+    const routing = pj.routingDetails?.[0] || {};
+    const party = pj.partyDetails?.[0] || {};
+    const commercial = pj.commercialDetails?.[0] || {};
+    const cargo = pj.cargoDetails || [];
+
+    const rawMode = String(pj.transportMode || "").toUpperCase();
+    const matchedMode = ["SEA", "AIR", "ROAD"].includes(rawMode) ? rawMode : "AIR";
+    const resolvedMode = matchedMode === "SEA" ? "Sea" : matchedMode === "ROAD" ? "Road" : "Air";
+
+    const cargoLines = cargo.map((c, i) => ({
+      id: `${Date.now()}-${i}`,
+      commodity: c.commodity || "",
+      pkgType: "",
+      qty: c.packages != null ? String(c.packages) : "",
+      weight: c.weight != null ? String(c.weight) : "",
+      weightUom: "kg",
+      volume: c.volume != null ? String(c.volume) : "",
+      volumeUom: "m³",
+      length: "", width: "", height: "", dimUom: "cm",
+      hsCode: "", dg: "No", reefer: "No", handling: [], remarks: "",
+    }));
+
+    const totalPackages = cargo.reduce((sum, c) => sum + (Number(c.packages) || 0), 0);
+    const totalWeight = cargo.reduce((sum, c) => sum + (Number(c.weight) || 0), 0);
+    const totalVolume = cargo.reduce((sum, c) => sum + (Number(c.volume) || 0), 0);
+
+    setForm((p) => ({
+      ...p,
+      prejobOpening: String(pj.id),
+      preJobRef: pj.docId || `Pre-Job ${pj.id}`,
+
+      shipmentType: String(pj.tradeType || "").toLowerCase() === "import" ? "Import" : "Export",
+      mode: resolvedMode,
+      customer: pj.customer || p.customer,
+      customerDisplayName: pj.customer || p.customerDisplayName,
+      salesPerson: pj.salesPerson || p.salesPerson,
+      shipper: pj.shipper || p.shipper,
+      consignee: pj.consignee || p.consignee,
+
+      bookingDate: isoToDisplay(pj.bookingDate || ""),
+      quotationRef: pj.quotationNo || p.quotationRef,
+      expectedShipmentDate: isoToDisplay(pj.expectedShippment || ""),
+
+      origin: portId(pj.origin) || p.origin,
+      originLabel: portLabel(pj.origin) || p.originLabel,
+      destination: portId(pj.destination) || p.destination,
+      destinationLabel: portLabel(pj.destination) || p.destinationLabel,
+      pol: pj.origin?.portName || p.pol,
+      pod: pj.destination?.portName || p.pod,
+
+      packages: totalPackages ? String(totalPackages) : p.packages,
+      grossWeight: totalWeight ? String(totalWeight) : p.grossWeight,
+      volume: totalVolume ? String(totalVolume) : p.volume,
+
+      cargoLines: cargoLines.length ? cargoLines : [emptyLine()],
+    }));
+
+    setErrorList([]);
+    setNotice({
+      type: "success",
+      text: `Pre-Job ${pj.docId || pj.id} applied to the booking.`,
     });
   };
 
@@ -1622,7 +1720,6 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
     return next;
   };
 
-  // ✅ Build the instructionDetails payload so existing documents survive
   const buildInstructionDetails = (f) => {
     const files = f.docs?.files || [];
 
@@ -1672,11 +1769,7 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
     const validation = validateBooking(form, "submit", ports);
 
     const ignoredValidationKeys = [
-      "origin",
-      "destination",
-      "incotermPlace",
-      "eta",
-      "equipment.containerQty"
+      "origin", "destination", "incotermPlace", "eta", "equipment.containerQty"
     ];
 
     const remainingErrors = validation.list.filter(
@@ -1692,11 +1785,9 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
       });
 
       const firstError = remainingErrors[0];
-
       if (firstError?.section) {
         scrollToSection(firstError.section);
       }
-
       return null;
     }
 
@@ -1704,26 +1795,23 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
     setBusy(action);
 
     try {
-      // Keep your existing API payload and save logic here
       const isUpdate = Boolean(form.id && form.id > 0);
 
       const apiPayload = {
         orgId,
         createdBy: loginUserName,
         branch: Number(form.branch) || orgId,
-        bookingStatus:
-          action === "submit" ? "Submitted" : form.status || "Draft",
+        bookingStatus: action === "submit" ? "Submitted" : form.status || "Draft",
         bookingType: form.bookingType || "Standard",
         type: form.bookingSource || "Direct",
-        quotationNo: form.quotationDocId || "", 
+        prejobOpening: form.preJobRef || "",
+        quotationNo: form.quotationDocId || "",
         quotationDate: displayToIso(form.quotationDate) || null,
         transportMode: form.mode || "",
         serviceType: form.serviceType || "",
         salesperson: form.salesperson || "",
         operationsOwner: form.opsOwner || "",
-
         customer: form.customer || form.customerDisplayName || "",
-
         customerReference: form.customerRef || "",
         remarks: form.commercial?.remarks || "",
         bookingNo: form.bookingNo || "",
@@ -1805,13 +1893,11 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
             freightPaymentTerms: form.commercial?.freightTerms || "",
             paymentTerms: form.commercial?.paymentTerms || "",
             quotationReference: form.commercial?.quotationRef || "",
-            sellCurrency:
-              currencyCodeFor(form.commercial?.sellCurrency) || "USD",
+            sellCurrency: currencyCodeFor(form.commercial?.sellCurrency) || "USD",
             sellRate: Number(form.commercial?.sellRate) || 0,
           },
         ],
 
-        // ✅ Send back every existing document so the backend doesn't delete
         instructionDetails: buildInstructionDetails(form),
       };
 
@@ -1821,24 +1907,15 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
         .map((f) => f.file)
         .filter(Boolean);
 
-      const res = await BookingAPI.createUpdateBooking(
-        apiPayload,
-        filesToUpload,
-      );
+      const res = await BookingAPI.createUpdateBooking(apiPayload, filesToUpload);
       const body = res?.data ?? res;
 
       if (!body?.status && body?.statusFlag !== "Ok") {
-        throw new Error(
-          body?.paramObjectsMap?.message || "Failed to save booking",
-        );
+        throw new Error(body?.paramObjectsMap?.message || "Failed to save booking");
       }
 
-      const serverId =
-        body?.paramObjectsMap?.bookingId || form.id || Math.max(0, 0) + 1;
-      const serverBookingNo =
-        body?.paramObjectsMap?.bookingNo ||
-        form.bookingNo ||
-        `BKG/26-27/${String(serverId).padStart(4, "0")}`;
+      const serverId = body?.paramObjectsMap?.bookingId || form.id || Math.max(0, 0) + 1;
+      const serverBookingNo = body?.paramObjectsMap?.bookingNo || form.bookingNo || `BKG/26-27/${String(serverId).padStart(4, "0")}`;
 
       const savedData = {
         ...form,
@@ -1848,9 +1925,7 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
       };
 
       const preservedFiles = form.docs?.files || [];
-
       const next = applySaved(savedData);
-
       next.docs = { ...next.docs, files: preservedFiles };
       setForm(next);
       savedRef.current = next;
@@ -1863,16 +1938,12 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
       );
 
       onSaveSuccess?.(next);
-
       return next;
     } catch (err) {
       console.error(err);
       setNotice({
         type: "error",
-        text:
-          err?.response?.data?.paramObjectsMap?.message ||
-          err?.message ||
-          "Unable to save booking. Please try again.",
+        text: err?.response?.data?.paramObjectsMap?.message || err?.message || "Unable to save booking.",
       });
       return null;
     } finally {
@@ -2201,7 +2272,7 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
     ["ETA", form.eta || "-"],
     [
       "Customer",
-      isFlowBooking
+      isBookingBased
         ? form.customerDisplayName || customer?.name || "-"
         : form.customerDisplayName || customer?.name || "-",
     ],
@@ -2381,17 +2452,44 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
                   error={errors.bookingType}
                 />
 
-                <SelectField
-                  label="Booking Source"
-                  required
-                  value={form.bookingSource || "Direct"}
-                  onChange={changeBookingSource}
-                  options={[
-                    { value: "Direct", label: "Direct" },
-                    { value: "Flow", label: "Flow" },
-                  ]}
-                  error={errors.bookingSource}
-                />
+                {/* ✅ Replaced Booking Source with Pre-Job / Quotation */}
+                {isDirect ? (
+                  <SearchableSelectField
+                    label="Pre-Job Opening"
+                    required
+                    value={form.prejobOpening || ""}
+                    onChange={applyPreJob}
+                    options={preJobOptions}
+                    placeholder={
+                      preJobLoading
+                        ? "Loading pre-jobs..."
+                        : preJobOptions.length
+                          ? "Search pre-job"
+                          : "No pre-jobs available"
+                    }
+                    disabled={preJobLoading || !preJobOptions.length}
+                    fallbackLabel={form.preJobRef}
+                    className="lg:col-span-2"
+                  />
+                ) : (
+                  <SearchableSelectField
+                    label="Quotation Reference"
+                    required
+                    value={form.quotationNo}
+                    onChange={applyQuotation}
+                    options={quotationOptions}
+                    placeholder={
+                      quotationLoading
+                        ? "Loading quotations..."
+                        : quotationOptions.length
+                          ? "Search quotation"
+                          : "No quotations available"
+                    }
+                    disabled={quotationLoading || !quotationOptions.length || !!form.id}
+                    fallbackLabel={form.quotationDocId}
+                    className="lg:col-span-2"
+                  />
+                )}
 
                 <TextField
                   label="Customer"
@@ -2399,7 +2497,7 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
                   className="lg:col-span-2"
                   value={form.customerDisplayName || customer?.name || ""}
                   onChange={(v) => {
-                    if (isFlowBooking) return;
+                    if (isDirect || isBookingBased) return; // Locked if auto-filled
                     const matched = customers.find(
                       (c) =>
                         String(c.name || "").trim().toLowerCase() ===
@@ -2413,12 +2511,8 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
                     }));
                     clearErr((k) => k === "customer");
                   }}
-                  placeholder={
-                    isFlowBooking
-                      ? "Auto-filled from quotation"
-                      : "Enter customer name"
-                  }
-                  disabled={isFlowBooking}
+                  placeholder="Enter customer name"
+                  disabled={isDirect || isBookingBased}
                   error={errors.customer}
                 />
 
@@ -2429,32 +2523,13 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
                   placeholder="e.g. PO12345"
                 />
 
-                {isFlowBooking && (
-                  <>
-                    <SelectField
-                      label="Quotation No"
-                      required
-                      value={form.quotationNo}
-                      onChange={applyQuotation}
-                      options={quotationOptions}
-                      placeholder={
-                        quotationLoading
-                          ? "Loading quotations..."
-                          : quotationOptions.length
-                            ? "Select quotation"
-                            : "No quotations available"
-                      }
-                      disabled={quotationLoading || !quotationOptions.length}
-                      error={errors.quotationNo}
-                    />
-                    <TextField
-                      label="Quotation Date"
-                      value={form.quotationDate || ""}
-                      placeholder="Auto-filled"
-                      disabled
-                      className="lg:col-span-1"
-                    />
-                  </>
+                {isDirect && (
+                  <TextField
+                    label="Expected Shipment Date"
+                    value={form.expectedShipmentDate || ""}
+                    placeholder="Auto-filled"
+                    disabled
+                  />
                 )}
               </div>
 
@@ -2535,23 +2610,31 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
                   onChange={(v) => set("etd", v)}
                   error={errors.etd}
                 />
-                <TextField
+                <SelectField
                   label="Incoterm"
+                  required
                   value={form.incoterm}
                   onChange={(v) => set("incoterm", v)}
-                  placeholder="e.g. FOB"
+                  options={incotermList.map((it) => ({
+                    value: it.incoterm,
+                    label: it.description
+                      ? `${it.incoterm} – ${it.description}`
+                      : it.incoterm,
+                  }))}
+                  placeholder={
+                    incotermList.length ? "Select Incoterm" : "No incoterms available"
+                  }
                   error={errors.incoterm}
                 />
 
                 <SearchableSelectField
                   label={portLabels?.[0] || "Origin"}
-                  // required
                   value={form.origin}
                   onChange={setOrigin}
                   options={originOptions}
                   placeholder="Search port"
-                  // error={errors.origin}
                   fallbackLabel={form.originLabel}
+                  disabled={isDirect || isBookingBased}
                 />
                 <DatePickerField
                   label="Requested ETA"
@@ -2569,13 +2652,12 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
 
                 <SearchableSelectField
                   label={portLabels?.[1] || "Destination"}
-                  // required
                   value={form.destination}
                   onChange={setDestination}
                   options={destinationOptions}
                   placeholder="Search port"
-                  // error={errors.destination}
                   fallbackLabel={form.destinationLabel}
+                  disabled={isDirect || isBookingBased}
                 />
                 <TextField
                   label="Carrier Preference"
@@ -2650,7 +2732,6 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
                   value={form.billingCustomer}
                   onChange={(v) => set("billingCustomer", v)}
                   placeholder="Billing customer"
-                  hint="Defaults to the booking customer"
                   error={errors.billingCustomer}
                 />
 
@@ -2661,7 +2742,6 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
                   onChange={(v) => set("contactPerson", v)}
                   placeholder="Name"
                   error={errors.contactPerson}
-                  disabled={isFlowBooking}
                 />
                 <TextField
                   label="Email"
@@ -2670,7 +2750,6 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
                   onChange={(v) => set("email", v)}
                   placeholder="name@company.com"
                   error={errors.email}
-                  disabled={isFlowBooking}
                 />
                 <TextField
                   label="Phone"
@@ -2682,7 +2761,6 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
                   }}
                   placeholder="+65 9876 5432"
                   error={errors.phone}
-                  disabled={isFlowBooking}
                 />
               </div>
             </Section>
@@ -2900,7 +2978,6 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
                                 <button
                                   type="button"
                                   onClick={() => removeLine(l.id)}
-                                  disabled={form.cargoLines.length === 1}
                                   aria-label="Remove cargo line"
                                   title="Remove line"
                                   className="flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 text-slate-500 transition hover:border-red-200 hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-red-500/10"
@@ -2967,6 +3044,7 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
                                             ? "border-blue-500 bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-300"
                                             : "border-slate-300 bg-white text-slate-600 hover:border-slate-400 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300"
                                             }`}
+                                          disabled={isDirect || isBookingBased}
                                         >
                                           {h}
                                         </button>
@@ -2982,6 +3060,7 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
                                     updateLine(l.id, { remarks: v })
                                   }
                                   placeholder="Additional handling instructions"
+                                  disabled={isDirect || isBookingBased}
                                 />
                               </td>
                             </tr>
@@ -3051,110 +3130,6 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
                 </span>
               </p>
             </Section>
-
-            {/* 5. Equipment */}
-            {/* {showEquipment && (
-              <Section
-                id="equipment"
-                icon={Package}
-                title={titleOf("equipment")}
-                subtitle={
-                  needsEquipment
-                    ? "Container numbers and seals are captured later in the shipment screen."
-                    : "Required because the cargo is marked as reefer."
-                }
-              >
-                <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
-                  {needsEquipment && (
-                    <>
-                      <SelectField
-                        label="Load Type"
-                        required
-                        value={form.equipment.loadType}
-                        onChange={(v) => setGroup("equipment", "loadType", v)}
-                        options={["FCL", "LCL"]}
-                        error={errors["equipment.loadType"]}
-                      />
-                      <SelectField
-                        label="Container Type"
-                        required={form.equipment.loadType === "FCL"}
-                        value={form.equipment.containerType}
-                        onChange={(v) =>
-                          setGroup("equipment", "containerType", v)
-                        }
-                        options={CONTAINER_TYPES}
-                        error={errors["equipment.containerType"]}
-                      />
-                      <TextField
-                        label="Container Quantity"
-                        required={form.equipment.loadType === "FCL"}
-                        type="number"
-                        step={1}
-                        value={form.equipment.containerQty}
-                        onChange={(v) =>
-                          setGroup("equipment", "containerQty", v)
-                        }
-                        error={errors["equipment.containerQty"]}
-                      />
-                    </>
-                  )}
-
-                  <Field
-                    label="Reefer Temperature"
-                    required={hasReefer}
-                    error={errors["equipment.reeferTemp"]}
-                  >
-                    <div className="flex gap-1.5">
-                      <input
-                        type="number"
-                        step="any"
-                        value={form.equipment.reeferTemp}
-                        placeholder="-18"
-                        onChange={(e) =>
-                          setGroup("equipment", "reeferTemp", e.target.value)
-                        }
-                        className={`${inputClass} ${errors["equipment.reeferTemp"] ? errClass : ""}`}
-                      />
-                      <div className="relative w-[76px] shrink-0">
-                        <select
-                          value={form.equipment.tempUnit}
-                          onChange={(e) =>
-                            setGroup("equipment", "tempUnit", e.target.value)
-                          }
-                          className={`${inputClass} appearance-none pr-6`}
-                        >
-                          <option>°C</option>
-                          <option>°F</option>
-                        </select>
-                        <ChevronDown
-                          size={12}
-                          className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-slate-400"
-                        />
-                      </div>
-                    </div>
-                  </Field>
-
-                  {needsEquipment && (
-                    <>
-                      <SelectField
-                        label="Equipment Preference"
-                        value={form.equipment.equipPref}
-                        onChange={(v) => setGroup("equipment", "equipPref", v)}
-                        options={EQUIPMENT_PREFS}
-                      />
-                      <SelectField
-                        label="Container Allocation"
-                        value={form.equipment.containerAlloc}
-                        onChange={(v) =>
-                          setGroup("equipment", "containerAlloc", v)
-                        }
-                        options={CONTAINER_ALLOCATIONS}
-                      />
-                    </>
-                  )}
-                </div>
-              </Section>
-            )} */}
 
             {/* 6. Commercial */}
             <Section
@@ -3234,6 +3209,7 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
                   value={form.commercial.remarks}
                   onChange={(v) => setGroup("commercial", "remarks", v)}
                   placeholder="Special pricing or approval comments"
+                  disabled={isDirect || isBookingBased}
                 />
               </div>
               {margin && (
@@ -3277,89 +3253,81 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
                     }}
                     className={`mt-2 flex flex-col items-center justify-center rounded-lg border-2 border-dashed px-3 py-5 text-center transition ${dragOver
                       ? "border-blue-500 bg-blue-50 dark:bg-blue-500/10"
-                      : "border-slate-300 bg-slate-50/60 dark:border-gray-700 dark:bg-gray-900/40"
+                      : "border-slate-300 bg-slate-50/60 dark:border-gray-700 dark:bg-gray-900/30"
                       }`}
                   >
                     <Upload
-                      size={18}
-                      className="text-blue-600 dark:text-blue-400"
+                      size={20}
+                      className="text-slate-400 dark:text-gray-500"
                     />
-                    <p className="mt-1 text-[11px] text-slate-600 dark:text-gray-300">
-                      Drag and drop files here or{" "}
+                    <p className="mt-1.5 text-[11px] font-medium text-slate-700 dark:text-gray-200">
+                      Drop files here or{" "}
                       <button
                         type="button"
                         onClick={() => fileInputRef.current?.click()}
-                        className="font-semibold text-blue-600 underline dark:text-blue-400"
+                        className="text-blue-600 underline hover:text-blue-700 dark:text-blue-400"
                       >
-                        click to upload
+                        browse
                       </button>
                     </p>
-                    <p className="mt-0.5 text-[10px] text-slate-400">
-                      PDF, JPG, PNG, DOC, DOCX (max 10 MB each)
+                    <p className="mt-0.5 text-[10px] text-slate-500 dark:text-gray-400">
+                      PDF, PNG, JPG up to 10 MB each
                     </p>
                     <input
-                      ref={fileInputRef}
                       type="file"
                       multiple
-                      hidden
+                      ref={fileInputRef}
+                      onChange={(e) => addFiles(e.target.files)}
                       accept={ALLOWED_EXT.map((x) => `.${x}`).join(",")}
-                      onChange={(e) => {
-                        addFiles(e.target.files);
-                        e.target.value = "";
-                      }}
+                      className="hidden"
                     />
                   </div>
-
                   {uploadMsgs.length > 0 && (
-                    <ul className="mt-1 space-y-0.5 text-[10px] text-red-500">
+                    <ul className="mt-1.5 space-y-0.5 text-[10px] text-red-600 dark:text-red-400">
                       {uploadMsgs.map((m) => (
-                        <li key={m}>{m}</li>
+                        <li key={m} className="flex items-center gap-1">
+                          <AlertTriangle size={10} />
+                          {m}
+                        </li>
                       ))}
                     </ul>
                   )}
+                </div>
 
-                  {form.docs.files.length > 0 && (
-                    <ul className="mt-2 divide-y divide-slate-100 rounded-md border border-slate-200 dark:divide-gray-700/50 dark:border-gray-700/60">
+                <div>
+                  {form.docs.files.length === 0 ? (
+                    <p className="text-[11px] text-slate-500 dark:text-gray-400">
+                      No files attached yet.
+                    </p>
+                  ) : (
+                    <ul className="space-y-1.5">
                       {form.docs.files.map((f) => (
                         <li
                           key={f.id}
-                          className="flex items-center justify-between gap-2 px-2.5 py-1.5"
+                          className="flex items-center justify-between gap-2 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 dark:border-gray-700 dark:bg-gray-900/40"
                         >
-                          <div className="flex min-w-0 items-center gap-2">
+                          <div className="min-w-0 flex items-center gap-1.5">
                             <FileText
                               size={13}
-                              className="shrink-0 text-slate-400"
+                              className="shrink-0 text-slate-400 dark:text-gray-500"
                             />
                             <div className="min-w-0">
-                              {f.url ? (
-                                <a
-                                  href={f.url}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  title={f.name}
-                                  className="block truncate text-[11px] font-medium text-blue-600 underline hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
-                                >
-                                  {f.name}
-                                </a>
-                              ) : (
-                                <p
-                                  className="truncate text-[11px] font-medium text-slate-800 dark:text-gray-100"
-                                  title={f.name}
-                                >
-                                  {f.name}
-                                </p>
-                              )}
+                              <p
+                                className="truncate text-[11px] font-medium text-slate-800 dark:text-gray-100"
+                                title={f.name}
+                              >
+                                {f.name}
+                              </p>
                               <p className="text-[10px] text-slate-500 dark:text-gray-400">
-                                {f.category} · {fmtSize(f.size)}
-                                {f.isExisting && " · uploaded"}
+                                {f.category} • {fmtSize(f.size)}
                               </p>
                             </div>
                           </div>
                           <button
                             type="button"
                             onClick={() => removeFile(f.id)}
-                            aria-label={`Remove ${f.name}`}
-                            className="text-slate-400 hover:text-red-600"
+                            aria-label="Remove file"
+                            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-slate-400 transition hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10"
                           >
                             <Trash2 size={13} />
                           </button>
@@ -3368,284 +3336,185 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
                     </ul>
                   )}
                 </div>
+              </div>
 
-                <div className="space-y-2.5">
-                  <TextAreaField
-                    label="Pickup Instructions"
-                    rows={2}
-                    value={form.docs.pickupInstructions}
-                    onChange={(v) => setGroup("docs", "pickupInstructions", v)}
-                    placeholder="e.g. Please call before arrival"
-                  />
-                  <TextAreaField
-                    label="Delivery Instructions"
-                    rows={2}
-                    value={form.docs.deliveryInstructions}
-                    onChange={(v) =>
-                      setGroup("docs", "deliveryInstructions", v)
-                    }
-                    placeholder="e.g. Deliver to warehouse gate 2"
-                  />
-                  <TextAreaField
-                    label="Internal Remarks"
-                    rows={2}
-                    value={form.docs.internalRemarks}
-                    onChange={(v) => setGroup("docs", "internalRemarks", v)}
-                    placeholder="Internal only - not included in customer documents"
-                  />
-                </div>
+              <div className="mt-3 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                <TextAreaField
+                  label="Pickup Instructions"
+                  rows={2}
+                  value={form.docs.pickupInstructions}
+                  onChange={(v) =>
+                    setForm((p) => ({
+                      ...p,
+                      docs: { ...p.docs, pickupInstructions: v },
+                    }))
+                  }
+                  placeholder="Instructions for pickup"
+                />
+                <TextAreaField
+                  label="Delivery Instructions"
+                  rows={2}
+                  value={form.docs.deliveryInstructions}
+                  onChange={(v) =>
+                    setForm((p) => ({
+                      ...p,
+                      docs: { ...p.docs, deliveryInstructions: v },
+                    }))
+                  }
+                  placeholder="Instructions for delivery"
+                />
+                <TextAreaField
+                  className="sm:col-span-2"
+                  label="Internal Remarks"
+                  rows={2}
+                  value={form.docs.internalRemarks}
+                  onChange={(v) =>
+                    setForm((p) => ({
+                      ...p,
+                      docs: { ...p.docs, internalRemarks: v },
+                    }))
+                  }
+                  placeholder="Internal notes for operations team"
+                />
               </div>
             </Section>
           </fieldset>
 
           {/* Sidebar */}
-          <aside className="space-y-2 lg:sticky lg:top-14">
-            <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm dark:border-gray-700/60 dark:bg-gray-800/40">
-              <h3 className="mb-2 text-[12px] font-semibold text-slate-900 dark:text-white">
-                Booking Summary
-              </h3>
-              <dl className="space-y-1.5 text-[11px]">
-                {summaryRows.map(([k, v]) => (
-                  <div key={k} className="flex justify-between gap-3">
-                    <dt className="text-slate-500 dark:text-gray-400">{k}</dt>
+          <div className="lg:sticky lg:top-16">
+            <Section id="summary" icon={Info} title="Booking Summary">
+              <dl className="space-y-1.5">
+                {summaryRows.map(([label, value]) => (
+                  <div
+                    key={label}
+                    className="flex items-center justify-between gap-2 text-[11px]"
+                  >
+                    <dt className="text-slate-500 dark:text-gray-400">{label}</dt>
                     <dd
-                      className="truncate text-right font-medium text-slate-800 dark:text-gray-100"
-                      title={String(v)}
+                      className="truncate font-medium text-slate-800 dark:text-gray-100"
+                      title={value}
                     >
-                      {v}
+                      {value}
                     </dd>
                   </div>
                 ))}
               </dl>
-            </div>
+            </Section>
 
-            <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm dark:border-gray-700/60 dark:bg-gray-800/40">
-              <h3 className="mb-2 flex items-center gap-1.5 text-[12px] font-semibold text-slate-900 dark:text-white">
-                <Info size={13} className="text-blue-600" />
-                Validation Messages
-              </h3>
-              {errorList.length === 0 ? (
-                <p className="rounded-md bg-blue-50 px-2.5 py-2 text-[10px] text-blue-800 dark:bg-blue-500/10 dark:text-blue-300">
-                  Please complete all mandatory fields before saving or submitting.
-                </p>
-              ) : (
-                <ul className="space-y-1">
-                  {shownErrors.map((e) => (
-                    <li key={e.key}>
-                      <button
-                        type="button"
-                        onClick={() => scrollToSection(e.section)}
-                        className="flex w-full items-start gap-1.5 rounded-md bg-red-50 px-2 py-1 text-left text-[10px] text-red-700 hover:bg-red-100 dark:bg-red-900/20 dark:text-red-300"
-                      >
-                        <AlertTriangle size={11} className="mt-px shrink-0" />
-                        {e.message}
-                      </button>
-                    </li>
-                  ))}
-                  {errorList.length > shownErrors.length && (
-                    <li className="px-1 text-[10px] text-slate-500">
-                      +{errorList.length - shownErrors.length} more
-                    </li>
-                  )}
-                </ul>
-              )}
-              {customer?.credit === "Warning" && (
-                <p className="mt-2 flex items-start gap-1.5 rounded-md bg-amber-50 px-2 py-1.5 text-[10px] text-amber-800 dark:bg-amber-500/10 dark:text-amber-300">
-                  <AlertTriangle size={11} className="mt-px shrink-0" />
-                  Credit warning for {customer.name}. Review before approval.
-                </p>
-              )}
-            </div>
-
-            <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm dark:border-gray-700/60 dark:bg-gray-800/40">
-              <h3 className="mb-2 text-[12px] font-semibold text-slate-900 dark:text-white">
-                Status Workflow
-              </h3>
-              <ol className="space-y-1.5">
-                {WORKFLOW_STEPS.map((s, i) => {
-                  const current = i === stepIndex;
-                  const done = stepIndex > i;
-                  return (
-                    <li
-                      key={s.status}
-                      className={`flex items-start gap-2 rounded-md px-2 py-1.5 ${current ? "bg-blue-50 dark:bg-blue-500/10" : ""
-                        }`}
-                    >
-                      <span
-                        className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${current
-                          ? "bg-blue-600 text-white"
-                          : done
-                            ? "bg-emerald-500 text-white"
-                            : "bg-slate-100 text-slate-400 dark:bg-gray-800"
-                          }`}
-                      >
-                        {done ? <Check size={11} /> : i + 1}
-                      </span>
-                      <span className="min-w-0">
+            <div className="mt-2">
+              <Section id="workflow" icon={History} title="Workflow Status">
+                <ol className="space-y-2">
+                  {WORKFLOW_STEPS.map((step, i) => {
+                    const done = i < stepIndex;
+                    const active = i === stepIndex;
+                    return (
+                      <li key={step.status} className="flex items-start gap-2">
                         <span
-                          className={`block text-[11px] font-semibold ${current
-                            ? "text-blue-700 dark:text-blue-300"
-                            : "text-slate-700 dark:text-gray-200"
+                          className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 ${done
+                            ? "border-emerald-500 bg-emerald-500 text-white"
+                            : active
+                              ? "border-blue-500 text-blue-600 dark:text-blue-400"
+                              : "border-slate-300 text-slate-400 dark:border-gray-600 dark:text-gray-500"
                             }`}
                         >
-                          {s.label}
+                          {done ? (
+                            <Check size={10} />
+                          ) : (
+                            <span className="h-1 w-1 rounded-full bg-current" />
+                          )}
                         </span>
-                        <span className="block text-[10px] text-slate-500 dark:text-gray-400">
-                          {s.status === "Carrier Confirmed" &&
-                            form.carrierConfirmation?.reference
-                            ? `Ref ${form.carrierConfirmation.reference}`
-                            : current && s.status === "Draft"
-                              ? s.sub
-                              : s.sub.replace(
-                                "Current status / editable",
-                                "Editable booking",
-                              )}
-                        </span>
-                      </span>
-                    </li>
-                  );
-                })}
-              </ol>
-              <div className="mt-2 rounded-md bg-slate-50 px-2.5 py-1.5 text-[10px] text-slate-600 dark:bg-gray-900/50 dark:text-gray-300">
-                {stepIndex === -1 ? (
-                  <>
-                    Current: <StatusChip status={form.status} />
-                  </>
-                ) : (
-                  "Alternative transitions:"
-                )}{" "}
-                Rejected, On Hold, Cancelled, Amendment Pending.
-              </div>
-              <p className="mt-2 text-[10px] text-slate-500 dark:text-gray-400">
-                Carrier confirmation does not mark cargo as shipped. Departure,
-                arrival and delivery are tracked as separate shipment
-                milestones.
-              </p>
+                        <div className="min-w-0">
+                          <p
+                            className={`text-[11px] font-semibold ${done || active
+                              ? "text-slate-800 dark:text-gray-100"
+                              : "text-slate-500 dark:text-gray-400"
+                              }`}
+                          >
+                            {step.status}
+                          </p>
+                          <p className="text-[10px] text-slate-500 dark:text-gray-400">
+                            {step.hint}
+                          </p>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ol>
+              </Section>
             </div>
-          </aside>
+
+            {shownErrors.length > 0 && (
+              <div className="mt-2">
+                <Section id="errors" icon={AlertTriangle} title="Validation Errors">
+                  <ul className="space-y-1 text-[11px] text-red-600 dark:text-red-400">
+                    {shownErrors.map((e) => (
+                      <li key={e.key} className="flex items-start gap-1">
+                        <AlertTriangle size={10} className="mt-0.5 shrink-0" />
+                        {e.message}
+                      </li>
+                    ))}
+                  </ul>
+                </Section>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Footer actions */}
-        <div className="sticky bottom-0 z-20 -mx-3 mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 bg-slate-50 px-3 py-2 sm:-mx-4 sm:px-4 lg:-mx-5 lg:px-5 dark:border-gray-800 dark:bg-gray-900">
+        <div className="sticky bottom-0 z-30 mt-3 flex flex-wrap items-center justify-end gap-2 border-t border-slate-200 bg-white/80 px-3 py-2 backdrop-blur dark:border-gray-700/60 dark:bg-gray-900/80">
           <button
             type="button"
-            onClick={() => setModal({ kind: "reset" })}
-            disabled={!!busy || !editable || !dirty}
+            onClick={requestExit}
+            disabled={!!busy}
             className={btnOutline}
           >
-            <RotateCcw size={12} />
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={handleReset}
+            disabled={!!busy || !dirty}
+            className={btnOutline}
+          >
+            <RotateCcw size={13} />
             Reset
           </button>
-
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            {editable && (
-              <>
-                <button
-                  type="button"
-                  onClick={handleSaveDraft}
-                  disabled={!!busy}
-                  className={btnOutline}
-                >
-                  <Save size={12} />
-                  {busy === "draft" ? "Saving..." : "Save Draft"}
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSaveNew}
-                  disabled={!!busy}
-                  className={btnOutline}
-                >
-                  <Plus size={12} />
-                  Save & New
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSubmit}
-                  disabled={!!busy}
-                  className={btnPrimary}
-                >
-                  <Send size={12} />
-                  {busy === "submit" ? "Submitting..." : "Submit Booking"}
-                </button>
-              </>
-            )}
-
+          {form.id && (
             <button
               type="button"
-              onClick={() => scrollToSection("documents")}
-              className={btnOutline}
-            >
-              <Paperclip size={12} />
-              Attachments
-              {form.docs.files.length > 0 && (
-                <span className="rounded-full bg-blue-600 px-1.5 text-[10px] text-white">
-                  {form.docs.files.length}
-                </span>
-              )}
-            </button>
-
-            <div className="relative" ref={menuRef}>
-              <button
-                type="button"
-                onClick={() => setMenuOpen((o) => !o)}
-                aria-haspopup="menu"
-                aria-expanded={menuOpen}
-                disabled={!!busy}
-                className={btnOutline}
-              >
-                <MoreHorizontal size={13} />
-                More Actions
-                <ChevronDown size={12} />
-              </button>
-              {menuOpen && (
-                <div
-                  role="menu"
-                  className="absolute bottom-full right-0 mb-1 w-60 rounded-md border border-slate-200 bg-white py-1 shadow-lg dark:border-gray-700 dark:bg-gray-900"
-                >
-                  {menuItems.map((m) => (
-                    <Fragment key={m.label}>
-                      {m.divider && (
-                        <div className="my-1 border-t border-slate-100 dark:border-gray-700/60" />
-                      )}
-                      <button
-                        type="button"
-                        role="menuitem"
-                        disabled={m.disabled}
-                        onClick={() => {
-                          setMenuOpen(false);
-                          m.onClick();
-                        }}
-                        className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-[12px] hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:hover:bg-gray-800 ${m.danger
-                          ? "text-red-600 dark:text-red-400"
-                          : "text-slate-700 dark:text-gray-200"
-                          }`}
-                      >
-                        {m.icon && <m.icon size={13} />}
-                        {m.label}
-                      </button>
-                    </Fragment>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <button
-              type="button"
-              onClick={requestExit}
+              onClick={handleSaveNew}
               disabled={!!busy}
               className={btnOutline}
             >
-              <X size={12} />
-              Cancel
+              <Plus size={13} />
+              Save & New
             </button>
-          </div>
+          )}
+          <button
+            type="button"
+            onClick={handleSaveDraft}
+            disabled={!!busy}
+            className={btnOutline}
+          >
+            <Save size={13} />
+            {busy === "draft" ? "Saving..." : "Save Draft"}
+          </button>
+          <button
+            type="button"
+            onClick={handleSubmit}
+            disabled={!!busy}
+            className={btnPrimary}
+          >
+            <Send size={13} />
+            {busy === "submit" ? "Submitting..." : "Submit Booking"}
+          </button>
         </div>
       </div>
 
-      {/* Dialogs */}
-      {modal?.kind === "reset" && (
+      {/* Modals */}
+      {modal?.kind === "discard" && (
         <Modal
-          title="Reset form?"
+          title="Discard unsaved changes?"
           onClose={() => setModal(null)}
           footer={
             <>
@@ -3655,130 +3524,37 @@ const BookingForm = ({ editData, onBack, onSaveSuccess, onNotify }) => {
                 onClick={() => setModal(null)}
               >
                 Keep editing
+              </button>
+              <button
+                type="button"
+                className={btnOutline}
+                onClick={saveAndExit}
+              >
+                Save draft & exit
               </button>
               <button
                 type="button"
                 className={`${btnBase} bg-red-600 text-white hover:bg-red-700`}
-                onClick={handleReset}
+                onClick={onBack}
               >
-                Reset
+                Discard & exit
               </button>
             </>
           }
         >
-          <p className="text-[12px] text-slate-600 dark:text-gray-300">
-            {form.id
-              ? "All unsaved changes will be discarded and the last saved version restored."
-              : "All entered data will be cleared."}
-          </p>
-        </Modal>
-      )}
-
-      {modal?.kind === "discard" && (
-        <Modal
-          title="Unsaved changes"
-          onClose={() => setModal(null)}
-          footer={
-            <>
-              <button
-                type="button"
-                className={btnOutline}
-                onClick={() => setModal(null)}
-              >
-                Keep editing
-              </button>
-              <button
-                type="button"
-                className={`${btnBase} border border-red-300 bg-white text-red-600 hover:bg-red-50 dark:bg-transparent`}
-                onClick={() => {
-                  setModal(null);
-                  onBack();
-                }}
-              >
-                Discard
-              </button>
-              <button
-                type="button"
-                className={btnPrimary}
-                onClick={saveAndExit}
-                disabled={!!busy}
-              >
-                <Save size={12} />
-                {busy ? "Saving..." : "Save draft & exit"}
-              </button>
-            </>
-          }
-        >
-          <p className="text-[12px] text-slate-600 dark:text-gray-300">
-            You have unsaved changes. Save them as a draft or discard them
-            before leaving.
+          <p className="text-[11px] text-slate-600 dark:text-gray-300">
+            You have unsaved changes. What would you like to do?
           </p>
         </Modal>
       )}
 
       {modal?.kind === "action" && actionConfigs[modal.name] && (
         <ActionModal
-          key={modal.name}
           config={actionConfigs[modal.name]}
-          busy={busy === "status"}
+          busy={!!busy}
           onClose={() => setModal(null)}
-          onSubmit={actionConfigs[modal.name].run}
+          onSubmit={(values) => actionConfigs[modal.name].run(values)}
         />
-      )}
-
-      {modal?.kind === "audit" && (
-        <Modal
-          wide
-          title={`Audit History${form.bookingNo ? ` - ${form.bookingNo}` : ""}`}
-          onClose={() => setModal(null)}
-          footer={
-            <button
-              type="button"
-              className={btnOutline}
-              onClick={() => setModal(null)}
-            >
-              Close
-            </button>
-          }
-        >
-          {form.audit.length === 0 ? (
-            <p className="text-[12px] text-slate-500 dark:text-gray-400">
-              No activity recorded yet. Save the booking to start the audit
-              trail.
-            </p>
-          ) : (
-            <table className="w-full text-left text-[11px]">
-              <thead>
-                <tr className="text-[10px] uppercase tracking-wider text-slate-500 dark:text-gray-400">
-                  <th className="py-1.5 pr-2 font-semibold">When</th>
-                  <th className="py-1.5 pr-2 font-semibold">User</th>
-                  <th className="py-1.5 font-semibold">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-gray-700/50">
-                {[...form.audit].reverse().map((a) => (
-                  <tr key={a.id}>
-                    <td className="whitespace-nowrap py-1.5 pr-2 text-slate-600 dark:text-gray-300">
-                      {fmtDateTime(a.at)}
-                    </td>
-                    <td className="whitespace-nowrap py-1.5 pr-2 text-slate-600 dark:text-gray-300">
-                      {a.by}
-                    </td>
-                    <td className="py-1.5 text-slate-800 dark:text-gray-100">
-                      <span className="font-semibold">{a.action}</span>
-                      {a.note && (
-                        <span className="text-slate-500 dark:text-gray-400">
-                          {" "}
-                          - {a.note}
-                        </span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </Modal>
       )}
     </div>
   );

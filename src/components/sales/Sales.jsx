@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import {
   FileText,
   ClipboardList,
@@ -64,6 +64,13 @@ const getColorStyles = (color) => {
       iconBg:
         "bg-green-100 dark:bg-green-900/40 group-hover:bg-green-200 dark:group-hover:bg-green-800",
     },
+    indigo: {
+      hover: "hover:bg-indigo-50 dark:hover:bg-indigo-900/30",
+      border: "hover:border-indigo-300 dark:hover:border-indigo-600",
+      text: "text-indigo-600 dark:text-indigo-400",
+      iconBg:
+        "bg-indigo-100 dark:bg-indigo-900/40 group-hover:bg-indigo-200 dark:group-hover:bg-indigo-800",
+    },
     purple: {
       hover: "hover:bg-purple-50 dark:hover:bg-purple-900/30",
       border: "hover:border-purple-300 dark:hover:border-purple-600",
@@ -86,9 +93,28 @@ const getColorStyles = (color) => {
 const Sales = () => {
   const navigate = useNavigate();
   const userType = localStorage.getItem("userType")?.toUpperCase();
+  const operationStartUp = (localStorage.getItem("operationStartUp") || "").trim().toLowerCase();
+  const isBookingBased = operationStartUp === "booking-based";
+
+  // ✅ Sort SALES dynamically based on operationStartUp
+  const sortedSales = useMemo(() => {
+    const list = [...SALES];
+    if (isBookingBased) {
+      // Move Booking before Pre-Job Opening
+      const bookingIdx = list.findIndex((s) => s.name === "Booking");
+      const preJobIdx = list.findIndex((s) => s.name === "Pre-Job Opening");
+
+      if (bookingIdx !== -1 && preJobIdx !== -1) {
+        const [bookingItem] = list.splice(bookingIdx, 1);
+        // Insert Booking at the position where Pre-Job was
+        list.splice(preJobIdx > bookingIdx ? preJobIdx - 1 : preJobIdx, 0, bookingItem);
+      }
+    }
+    return list;
+  }, [isBookingBased]);
 
   // Preserve existing screen access rules.
-  const filteredSales = SALES.filter((item) => {
+  const filteredSales = sortedSales.filter((item) => {
     if (userType === "SADMIN") {
       return item.sadminOnly === true;
     }

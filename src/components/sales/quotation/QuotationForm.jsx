@@ -29,6 +29,7 @@ import { downloadQuotationPdf } from "./quotationPdf";
 import QuotationAPI from "../../../api/sales/quotationAPI";
 import EnquiryAPI from "../../../api/sales/enquiryAPI";
 import currencyAPI from "../../../api/currencyAPI";
+import IncotermsAPI from "../../../api/IncotermsAPI";
 
 // -------------------------------------------------------------
 // Date Helpers
@@ -234,11 +235,6 @@ const serviceTypes = [
   "Door to Door",
   "Airport to Airport",
   "Airport to Door",
-];
-
-const incoterms = [
-  "EXW", "FCA", "FOB", "CIF",
-  "CIP", "CPT", "DAP", "DDP", "DPU",
 ];
 
 const statuses = [
@@ -762,6 +758,8 @@ const QuotationForm = ({ onBack = () => { }, onSave, editData }) => {
   const branch = parseInt(localStorage.getItem("branchId")) || orgId;
   const loginUserName = localStorage.getItem("userName") || "SYSTEM";
 
+  const [incotermList, setIncotermList] = useState([]);
+
   const totals = useMemo(() => calcQuotationTotals(form), [form]);
   const { summary, originTotal, airlines } = totals;
 
@@ -775,6 +773,18 @@ const QuotationForm = ({ onBack = () => { }, onSave, editData }) => {
   // --------------------------------------------------------------
   // Load supporting data
   // --------------------------------------------------------------
+  const fetchIncoterms = useCallback(async () => {
+    try {
+      const rows = await IncotermsAPI.getIncotermsByOrgId(orgId);
+      const active = (Array.isArray(rows) ? rows : []).filter(
+        (r) => r?.active === "Active" && r?.cancel !== "T",
+      );
+      setIncotermList(active);
+    } catch (error) {
+      console.error("Failed to load Incoterms:", error);
+    }
+  }, [orgId]);
+
   const fetchEnquiries = useCallback(async () => {
     try {
       const rows = await EnquiryAPI.getEnquiryByOrgId(branch, orgId);
@@ -949,7 +959,8 @@ const QuotationForm = ({ onBack = () => { }, onSave, editData }) => {
   useEffect(() => {
     fetchCurrencies();
     fetchEnquiries();
-  }, [fetchCurrencies, fetchEnquiries]);
+    fetchIncoterms();
+  }, [fetchCurrencies, fetchEnquiries, fetchIncoterms]);
 
   useEffect(() => {
     if (editData?.id) fetchQuotationById(editData.id);
@@ -1740,8 +1751,15 @@ const QuotationForm = ({ onBack = () => { }, onSave, editData }) => {
                     required
                     value={form.incoterm}
                     onChange={(v) => setField("incoterm", v)}
-                    options={incoterms}
-                    placeholder="Select Incoterm"
+                    options={incotermList.map((it) => ({
+                      value: it.incoterm,
+                      label: it.description
+                        ? `${it.incoterm} – ${it.description}`
+                        : it.incoterm,
+                    }))}
+                    placeholder={
+                      incotermList.length ? "Select Incoterm" : "No incoterms available"
+                    }
                     error={errors.incoterm}
                   />
                   <SelectField
