@@ -18,7 +18,7 @@ const LINE = [190, 199, 208];
 const WHITE = [255, 255, 255];
 
 export const DEFAULT_HBL = {
-  companyName: "UGS LOGISTICS",
+  companyName: "EFIT TECHNOLOGIES PTE LTD",
   companySubtitle: "UNIWORLD GLOBAL SYSTEM | FREIGHT FORWARDING & LOGISTICS",
   hblNumber: "[Enter HBL number]",
   bookingReference: "[Enter reference]",

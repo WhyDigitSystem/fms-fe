@@ -27,6 +27,7 @@ import {
   Wrench,
   Truck,
   Anchor,
+  ShieldCheck,
 } from "lucide-react";
 
 import { useNavigate } from "react-router-dom";
@@ -189,6 +190,20 @@ const MASTERS = [
     color: "teal",
     screenCode: "LOV",
   },
+  {
+    name: "GST IN",
+    icon: Landmark,
+    path: "/gst-in",
+    color: "blue",
+    screenCode: "GST_IN",
+  },
+  {
+    name: "Party Screening",
+    icon: ShieldCheck,
+    path: "/party-screening",
+    color: "green",
+    screenCode: "PARTY_SCREENING",
+  },
 ];
 
 // Business Master contains only these items
@@ -198,6 +213,8 @@ const BUSINESS_MASTER_NAMES = [
   "Port",
   "Mode",
   "Customer",
+  "GST IN",
+  "Party Screening",
 ];
 
 // Split the master items into two sections

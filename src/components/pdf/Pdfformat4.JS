@@ -31,7 +31,7 @@ const X = (u) => L + (u * W) / 1000;
 const Y = (py) => 28 + (py - 97) * 0.39;
 
 export const DEFAULT_WB = {
-  brand: "MAERSK",
+  brand: "EFIT",
   logo: "", // optional data-URL; replaces the text wordmark
   docTitle: "NON-NEGOTIABLE WAYBILL",
   scac: "MAEU",

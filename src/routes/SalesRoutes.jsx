@@ -11,6 +11,8 @@ import PdfFormat3 from "../components/pdf/Pdfformat3.JS";
 import PdfFormat4 from "../components/pdf/Pdfformat4.JS";
 import PdfFormat5 from "../components/pdf/PdfFormat5";
 import PdfFormat6 from "../components/pdf/PdfFormat6";
+import GstIn from "../components/sales/GstIn/GstIn";
+import PartyScreening from "../components/sales/GstIn/PartyScreening";
 
 const salesRoutes = [
   {
@@ -62,6 +64,14 @@ const salesRoutes = [
   {
     path: "Pdfformat6",
     element: <PdfFormat6 />,
+  },
+  {
+    path: "gst-in",
+    element: <GstIn />,
+  },
+  {
+    path: "party-screening",
+    element: <PartyScreening />,
   },
 ];
 
